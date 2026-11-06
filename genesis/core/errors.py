@@ -45,6 +45,10 @@ class ArithmeticRangeError(GenesisError):
     """Raised when an integer or fixed-point operation exceeds int64 bounds."""
 
 
+class DivisionByZeroError(ArithmeticRangeError):
+    """Raised when dividing or taking modulo by zero."""
+
+
 class SerializationError(GenesisError):
     """Raised when canonical serialization or state deserialization fails."""
 

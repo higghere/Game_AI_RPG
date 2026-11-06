@@ -8,9 +8,15 @@ and atomic single-rule rollback on failure or quota overflow.
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from genesis.core.arithmetic import FixedPoint
+from genesis.core.arithmetic import FixedPoint, check_int64, half_even_div
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
-from genesis.core.errors import GRLExecutionError, QuotaExceededError
+from genesis.core.errors import (
+    ArithmeticRangeError,
+    DivisionByZeroError,
+    GenesisError,
+    GRLExecutionError,
+    QuotaExceededError,
+)
 from genesis.grl.ast import (
     AddRelationshipNode,
     AdjustPropertyNode,
@@ -216,15 +222,39 @@ class GRLInterpreter:
             right_val = self.eval_expression(node.right, ctx, world)
 
             if node.op == "ADD":
+                if isinstance(left_val, int) and isinstance(right_val, int) and not isinstance(left_val, bool) and not isinstance(right_val, bool):
+                    return check_int64(left_val + right_val)
                 return left_val + right_val
             elif node.op == "SUBTRACT":
+                if isinstance(left_val, int) and isinstance(right_val, int) and not isinstance(left_val, bool) and not isinstance(right_val, bool):
+                    return check_int64(left_val - right_val)
                 return left_val - right_val
             elif node.op == "MULTIPLY":
+                if isinstance(left_val, int) and isinstance(right_val, int) and not isinstance(left_val, bool) and not isinstance(right_val, bool):
+                    return check_int64(left_val * right_val)
                 return left_val * right_val
             elif node.op == "DIVIDE":
-                return left_val / right_val
+                if isinstance(left_val, int) and isinstance(right_val, int) and not isinstance(left_val, bool) and not isinstance(right_val, bool):
+                    if right_val == 0:
+                        raise DivisionByZeroError("Division by zero in integer arithmetic")
+                    return half_even_div(left_val, right_val)
+                elif isinstance(left_val, FixedPoint) or isinstance(right_val, FixedPoint):
+                    if isinstance(right_val, FixedPoint) and right_val.raw_value == 0:
+                        raise DivisionByZeroError("Division by zero in FixedPoint arithmetic")
+                    if isinstance(right_val, int) and right_val == 0:
+                        raise DivisionByZeroError("Division by zero in FixedPoint arithmetic")
+                    return left_val / right_val
+                raise GRLExecutionError(f"Unsupported types for DIVIDE: {type(left_val).__name__} / {type(right_val).__name__}")
             elif node.op == "MODULO":
-                return left_val % right_val
+                if isinstance(left_val, int) and isinstance(right_val, int) and not isinstance(left_val, bool) and not isinstance(right_val, bool):
+                    if right_val == 0:
+                        raise DivisionByZeroError("Modulo by zero in integer arithmetic")
+                    return check_int64(left_val % right_val)
+                elif isinstance(left_val, FixedPoint) and isinstance(right_val, FixedPoint):
+                    if right_val.raw_value == 0:
+                        raise DivisionByZeroError("Modulo by zero in FixedPoint arithmetic")
+                    return left_val % right_val
+                raise GRLExecutionError(f"Unsupported types for MODULO: {type(left_val).__name__} % {type(right_val).__name__}")
             elif node.op == "EQUALS":
                 return left_val == right_val
             elif node.op == "NOT_EQUALS":

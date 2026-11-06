@@ -71,6 +71,56 @@ class TestArithmetic(unittest.TestCase):
         with self.assertRaises(ArithmeticRangeError):
             check_int64(MIN_INT64 - 1)
 
+    def test_int64_division_and_modulo_semantics(self):
+        from genesis.core.errors import DivisionByZeroError
+        from genesis.grl.ast import BinaryOpNode, LiteralNode, RuleDefinition
+        from genesis.grl.interpreter import GRLInterpreter
+        from genesis.substrate.world_state import WorldState
+
+        # 1. Pure function tests
+        self.assertEqual(half_even_div(7, 2), 4)  # 3.5 -> 4
+        self.assertEqual(half_even_div(5, 2), 2)  # 2.5 -> 2
+        self.assertEqual(half_even_div(6, 2), 3)  # 3.0 -> 3
+        self.assertEqual(half_even_div(-7, 2), -4) # -3.5 -> -4
+        self.assertEqual(half_even_div(-5, 2), -2) # -2.5 -> -2
+
+        with self.assertRaises(DivisionByZeroError):
+            half_even_div(10, 0)
+
+        # 2. GRL interpreter expression tests: INT64 DIVIDE returns int (never float)
+        interp = GRLInterpreter()
+        world = WorldState(seed=1)
+        from genesis.grl.interpreter import ExecutionContext
+        ctx = ExecutionContext("test_div")
+
+        # 7 / 2 -> 4 (int)
+        node_div_odd = BinaryOpNode("DIVIDE", LiteralNode("INT64", 7), LiteralNode("INT64", 2))
+        res1 = interp.eval_expression(node_div_odd, ctx, world)
+        self.assertIsInstance(res1, int)
+        self.assertEqual(res1, 4)
+
+        # 5 / 2 -> 2 (int)
+        node_div_even = BinaryOpNode("DIVIDE", LiteralNode("INT64", 5), LiteralNode("INT64", 2))
+        res2 = interp.eval_expression(node_div_even, ctx, world)
+        self.assertIsInstance(res2, int)
+        self.assertEqual(res2, 2)
+
+        # Divide by zero raises DivisionByZeroError
+        node_div_zero = BinaryOpNode("DIVIDE", LiteralNode("INT64", 10), LiteralNode("INT64", 0))
+        with self.assertRaises(DivisionByZeroError):
+            interp.eval_expression(node_div_zero, ctx, world)
+
+        # Modulo
+        node_mod = BinaryOpNode("MODULO", LiteralNode("INT64", 14), LiteralNode("INT64", 5))
+        res_mod = interp.eval_expression(node_mod, ctx, world)
+        self.assertIsInstance(res_mod, int)
+        self.assertEqual(res_mod, 4)
+
+        # Modulo by zero raises DivisionByZeroError
+        node_mod_zero = BinaryOpNode("MODULO", LiteralNode("INT64", 14), LiteralNode("INT64", 0))
+        with self.assertRaises(DivisionByZeroError):
+            interp.eval_expression(node_mod_zero, ctx, world)
+
 
 if __name__ == "__main__":
     unittest.main()

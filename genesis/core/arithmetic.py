@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from typing import Final, Union
 
-from genesis.core.errors import ArithmeticRangeError
+from genesis.core.errors import ArithmeticRangeError, DivisionByZeroError
 
 SCALE: Final[int] = 1_000_000
 MIN_INT64: Final[int] = -9_223_372_036_854_775_808
@@ -29,7 +29,7 @@ def check_int64(val: int) -> int:
 def half_even_div(numerator: int, denominator: int) -> int:
     """Pure integer division with exact round-half-to-even (banker's rounding)."""
     if denominator == 0:
-        raise ZeroDivisionError("FixedPoint division by zero")
+        raise DivisionByZeroError("Division by zero in integer division")
 
     sign = -1 if (numerator < 0) ^ (denominator < 0) else 1
     num = abs(numerator)
@@ -166,15 +166,23 @@ class FixedPoint:
 
     def __floordiv__(self, other: Union[FixedPoint, int]) -> FixedPoint:
         if isinstance(other, FixedPoint):
+            if other._raw == 0:
+                raise DivisionByZeroError("Floor division by zero in FixedPoint arithmetic")
             return FixedPoint.from_int(self._raw // other._raw)
         if isinstance(other, int):
+            if other == 0:
+                raise DivisionByZeroError("Floor division by zero in FixedPoint arithmetic")
             return FixedPoint(self._raw // (other * SCALE) * SCALE)
         return NotImplemented
 
     def __mod__(self, other: Union[FixedPoint, int]) -> FixedPoint:
         if isinstance(other, FixedPoint):
+            if other._raw == 0:
+                raise DivisionByZeroError("Modulo by zero in FixedPoint arithmetic")
             return FixedPoint(self._raw % other._raw)
         if isinstance(other, int):
+            if other == 0:
+                raise DivisionByZeroError("Modulo by zero in FixedPoint arithmetic")
             return FixedPoint(self._raw % (other * SCALE))
         return NotImplemented
 

@@ -32,6 +32,45 @@ A test that compares only population counts, entity counts, or approximate resou
   ```
 - **Bitwise Precision:** All operations are masked with `0xFFFFFFFFFFFFFFFF` (`uint64`), guaranteeing identical behavior across 32-bit and 64-bit systems, x86_64, and ARM64.
 
+### Protocol 1.1: Option C Per-Invocation Rule Random Stream Derivation
+
+To guarantee that failed rules do not mutate substrate state (`world.rng`) and that rules cannot get stuck drawing identical values across ticks, GRL rules do not draw from the substrate's shared PRNG stream. Instead, every rule invocation instantiates an isolated `GenesisRNG` instance derived deterministically via SHA-256 from stable inputs.
+
+#### 1. Input Fields & Serialization Byte Layout
+
+The 6 derivation inputs are serialized into a contiguous binary payload using standard library `hashlib.sha256`:
+
+| Field | Encoding & Size | Value & Semantics |
+| :--- | :--- | :--- |
+| **Domain Tag** | Length-prefixed ASCII (4 bytes length + 22 bytes) | ASCII `genesis/rule-stream/v1` prefixed with 4-byte big-endian length `\x00\x00\x00\x16` |
+| **World Seed** | 8 bytes, `uint64` big-endian | Original world seed `world.world_seed` (canonical snapshot field, NOT dynamic RNG state) |
+| **Tick** | 8 bytes, `uint64` big-endian | Current simulation clock tick `world.clock.current_tick` |
+| **Rule ID** | Length-prefixed UTF-8 (4 bytes length + $N$ bytes) | UTF-8 encoded string of `rule.rule_id` prefixed with 4-byte big-endian length |
+| **Cell X, Cell Y** | 16 bytes (8 bytes signed `int64` big-endian each) | Spatial coordinates $(c_x, c_y)$ of the cell. For global (non-spatial) rules, fixed sentinel pair `(-9223372036854775808, -9223372036854775808)` (i.e. `MIN_INT64 = -2^63`) |
+| **Invocation Index** | 4 bytes, `uint32` big-endian | Count of earlier invocations of `(rule_id, cell)` within this tick (normally 0; ensures multiple calls within one tick never repeat draws) |
+
+#### 2. Digest-to-State Mapping
+
+The 32-byte SHA-256 digest is split into four 64-bit big-endian unsigned integers that form the initial 256-bit state of `xoshiro256**`:
+
+$$s_0 = \text{int.from\_bytes}(\text{digest}[0:8], \text{"big"})$$
+$$s_1 = \text{int.from\_bytes}(\text{digest}[8:16], \text{"big"})$$
+$$s_2 = \text{int.from\_bytes}(\text{digest}[16:24], \text{"big"})$$
+$$s_3 = \text{int.from\_bytes}(\text{digest}[24:32], \text{"big"})$$
+
+#### 3. All-Zero Digest Fallback
+
+In the extremely rare event that all 32 bytes of the SHA-256 digest evaluate to zero ($s_0 = s_1 = s_2 = s_3 = 0$), the PRNG state defaults to the fixed non-zero fallback vector:
+$$\mathbf{S}_{\text{fallback}} = [1, 1, 1, 1]$$
+
+#### 4. Stream Lifecycle & Invariants
+
+1. **Substrate Isolation:** `world.rng` is never touched by rule execution and is reserved exclusively for engine-level routines (e.g. deterministic spatial cell order shuffling).
+2. **Strict Rollback Invariance:** A rule that fails, exceeds its budget, or rolls back leaves `world.rng` and `world.compute_substrate_hash()` 100% bit-identical.
+3. **No Stuck Rules:** Advancing the clock tick changes the input tuple, guaranteeing that a rule evaluated at tick $t+1$ draws a different random sequence than at tick $t$.
+4. **Order & Schedule Independence:** A rule's random sequence depends exclusively on `(world_seed, tick, rule_id, cell, invocation_index)`. It is unaffected by other concurrently executing rules, execution order, or cell shuffle order.
+5. **Ephemerality:** The derived `GenesisRNG` stream is discarded when rule execution finishes and is never persisted into snapshots.
+
 ### Protocol 2: The JSON Number Precision Guard (Stringified 64-Bit Values)
 - **The Problem:** RFC 8785 and standard IEEE-754 double precision floats (the default number format for JSON in JavaScript and many parsers) are exact only up to $2^{53} - 1 \approx 9.007 \times 10^{15}$. 
   - The GENESIS `int64` maximum is $9,223,372,036,854,775,807 \approx 9.22 \times 10^{18}$.

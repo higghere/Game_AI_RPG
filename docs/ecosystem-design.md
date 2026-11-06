@@ -260,8 +260,10 @@ Phase 2 enforces three categories of formal invariants:
 4. **Newborn Entity Scheduling Lifecycle:**
    Entities created during a tick via `CREATE_ENTITY` are stamped with `born_tick = current_tick`.
    **Newborn entities do NOT act in the tick they are born.** They become eligible for candidate selection strictly starting at tick $t + 1$. This eliminates intra-tick priority race conditions and ensures all entities active in a tick exist simultaneously at tick start.
-5. **Monotonic PRNG Stream Across Rollbacks:**
-   **Rolled-back rules keep their RNG draws.** If a rule draws random numbers and subsequently aborts or rolls back (e.g. Due to precondition failure, quota exceeded, or constraint violation), the PRNG state does NOT rewind. The PRNG advances monotonically, ensuring entropy forward progress, preventing search/replay loops, and maintaining linear execution order.
+5. **Per-Invocation Deterministic PRNG Streams (Option C):**
+   Random draws inside a rule come from an independent, per-invocation `GenesisRNG` stream derived deterministically from stable inputs `(world_seed, tick, rule_id, cell, invocation_index)` via SHA-256, completely isolated from the substrate's shared `world.rng`. This architecture simultaneously eliminates two fatal failure modes:
+   - *No stuck rules:* If a rule aborted and rewound a shared RNG, identical subsequent attempts would redraw identical rolls and fail in an infinite retry loop; under Option C, each tick advances the stable derivation inputs, guaranteeing fresh random draws across ticks.
+   - *Strict rollback purity:* If an aborted rule did not rewind a shared RNG, a failed rule would irreversibly mutate substrate state (the PRNG vector), violating the fundamental invariant that an aborted rule leaves substrate state bit-identical. Under Option C, `world.rng` is untouched by rules, guaranteeing that the substrate state hash before and after an aborted rule is 100% bit-identical.
 6. **Zero Quota Failure Invariant in Ecosystem Tests:**
    In all Phase 2 ecosystem tests (`TEST-201` through `TEST-207`), rule rollback is strictly a failure-prevention harness, NOT an expected operational mechanism. Every test requires **ZERO quota failures** (`world.event_journal` must have 0 events of type `rule_execution_failed` with `QuotaExceededError`). Any quota breach indicates improper spatial batching or rule design failure and will fail the acceptance test.
 
@@ -383,9 +385,9 @@ All proposed additions preserve Phase 1 invariants: deterministic execution, int
     "max": "0.050000"
   }
   ```
-* **Semantics:** Pure expression nodes that draw the next pseudo-random value from `world.rng` (`xoshiro256**`). Advances the internal 256-bit PRNG state deterministically.
+* **Semantics:** Pure expression nodes that draw the next pseudo-random value from the invocation's isolated `ctx.rng` stream (`GenesisRNG` running `xoshiro256**`), derived deterministically via Option C. Draws advance only the invocation stream and never mutate `world.rng`.
 * **Metering:** Costs $1$ operation per invocation. Consumes $0$ entity touches.
-* **Determinism Invariant:** PRNG draws occur in strictly deterministic order (governed by rule priority, cell execution order, and AST traversal). Full PRNG state is serialized in snapshots, guaranteeing identical sequences across replays and architectures.
+* **Determinism Invariant:** Each rule invocation receives an independent `GenesisRNG` stream seeded from a SHA-256 digest of `(world_seed, tick, rule_id, cell, invocation_index)`. Random values depend strictly on their own invocation parameters, completely independent of rule execution order or spatial cell shuffling. The stream is discarded upon rule completion (commit or rollback) and never persisted.
 
 #### 8.1.3 Bounded Query & Aggregation: `FIND_ENTITY` and `AGGREGATE`
 
@@ -1084,14 +1086,17 @@ All schemas and ontology definitions are externalized into JSON data declaration
 
 The following matrix verifies that all six canonical rules comfortably operate within the **256-operation per cell/rule budget** and the **1,000-entity aggregate tick touch cap** across a full Alpha world of 300 active agents distributed across 30 spatial cells:
 
-| Case | Scenario Rule ID | Max Candidates Evaluated | Max Ops per Invocation | 256-Op Budget Headroom | Max Touches per Invocation | Projected Ticks Touches (30 Cells / 300 Agents) | 1,000-Touch Tick Headroom | Failure Mode on Quota Breach |
+| Case | Scenario Rule ID | Max Candidates Evaluated | Measured Ops per Invocation | 256-Op Budget Headroom | Max Touches per Invocation | Projected Ticks Touches (30 Cells / 300 Agents) | 1,000-Touch Tick Headroom | Failure Mode on Quota Breach |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **(a)** | `BR_06_REPRODUCTION` | 10 scanned, 2 created | 98 ops | **62% (158 ops left)** | 12 entities | 360 touches | **64% (640 touches left)** | Single-rule rollback; no offspring spawned |
-| **(b)** | `BR_05_DEATH_RECYCLE` | 10 scanned, 5 destroyed | 95 ops | **63% (161 ops left)** | 10 entities | 300 touches | **70% (700 touches left)** | Single-rule rollback; body remains for next tick |
-| **(c)** | `BR_BILATERAL_TRADE` | 1 target, 8 partners | 56 ops | **78% (200 ops left)** | 9 entities | 270 touches | **73% (730 touches left)** | Single-rule rollback; balances untouched |
-| **(d)** | `BR_SUBJECT_TAX_PUSH` | 5 subjects per cell | 80 ops (12 ops / agent) | **69% (176 ops left)** | 6 entities (2 / agent) | 180 touches | **82% (820 touches left)** | Single-rule rollback; no tax pushed |
-| **(e)** | `BR_LEADER_SUCCESSION`| 1 leader, 16 subjects | 90 ops | **65% (166 ops left)** | 17 entities | 34 touches (2 successions) | **96% (966 touches left)** | Single-rule rollback; old leader uncollected |
-| **(f)** | `BR_PRACTICE_TRANSMIT`| 2 learners, 6 mentors | 72 ops | **72% (184 ops left)** | 8 entities | 240 touches | **76% (760 touches left)** | Single-rule rollback; proficiency unmutated |
+| **(a)** | `BR_06_REPRODUCTION` | 10 scanned, 2 created | 166 ops | **35% (90 ops left)** | 12 entities | 360 touches | **64% (640 touches left)** | Single-rule rollback; no offspring spawned |
+| **(b)** | `BR_05_DEATH_RECYCLE` | 10 scanned, 5 destroyed | 150 ops | **41% (106 ops left)** | 10 entities | 300 touches | **70% (700 touches left)** | Single-rule rollback; body remains for next tick |
+| **(c)** | `BR_BILATERAL_TRADE` | 1 target, 8 partners | 109 ops | **57% (147 ops left)** | 9 entities | 270 touches | **73% (730 touches left)** | Single-rule rollback; balances untouched |
+| **(d)** | `BR_SUBJECT_TAX_PUSH` | 5 subjects per cell | 147 ops | **43% (109 ops left)** | 6 entities (2 / agent) | 180 touches | **82% (820 touches left)** | Single-rule rollback; no tax pushed |
+| **(e)** | `BR_LEADER_SUCCESSION`| 1 leader, 16 subjects | 148 ops | **42% (108 ops left)** | 17 entities | 34 touches (2 successions) | **96% (966 touches left)** | Single-rule rollback; old leader uncollected |
+| **(f)** | `BR_PRACTICE_TRANSMIT`| 2 learners, 6 mentors | 65 ops | **75% (191 ops left)** | 8 entities | 240 touches | **76% (760 touches left)** | Single-rule rollback; proficiency unmutated |
+
+> [!NOTE]
+> Operation counts in the table above reflect actual measurements produced by the real GRL interpreter (`tests/test_grl_phase2a.py`), which strictly meters one operation per evaluated AST node (including expressions, conditionals, statements, effect parameters, and collections). All six benchmark rules execute comfortably within the 256-operation per cell/rule budget.
 
 ---
 

@@ -263,6 +263,61 @@ class TestGRLLimits(unittest.TestCase):
         self.assertEqual(install_events[0].payload["rule_hash"], hash_A)
         self.assertEqual(install_events[0].payload["active_from_tick"], "1")
 
+    def test_entity_touch_limit_aggregate_across_multiple_rules_in_tick(self):
+        """Verify the 1000 entity touch limit is aggregated across all rules in a tick."""
+        config = RuntimeConfig(max_operations_per_rule=100000, max_entities_touched_per_tick=1000)
+        interpreter = GRLInterpreter(config)
+        world = WorldState(seed=6, config=config)
+
+        schema = EntityTypeSchema("node")
+        schema.add_property(PropertyDefinition("val", PropertyType.INT64, default_value=0))
+        world.schema_registry.register_type(schema)
+
+        # Create 1100 distinct entities
+        for _ in range(1100):
+            world.entities.create_entity("node", 0, {"val": 0}, world.schema_registry)
+
+        # Rule 1 touches entities 1 to 600
+        rule_1 = RuleDefinition(
+            rule_id="r1_touch_600",
+            name="Touch 600",
+            version="1.0",
+            target_selector=TargetSelector("node", limit=600),
+            effects=[]
+        )
+        ok1, msg1 = interpreter.execute_rule(rule_1, world)
+        self.assertTrue(ok1, f"Rule 1 should succeed touching 600: {msg1}")
+        self.assertEqual(len(world.entities_touched_this_tick), 600)
+
+        # Rule 2 targets all nodes but with a non-matching filter over remaining nodes
+        # If it touches 401 additional entities (600 + 401 = 1001 > 1000), it must fail!
+        # Create a second entity type "node_b" for 500 distinct entities
+        schema_b = EntityTypeSchema("node_b")
+        schema_b.add_property(PropertyDefinition("tag", PropertyType.INT64, default_value=0))
+        world.schema_registry.register_type(schema_b)
+        for _ in range(500):
+            world.entities.create_entity("node_b", 0, {"tag": 0}, world.schema_registry)
+
+        rule_2 = RuleDefinition(
+            rule_id="r2_touch_b",
+            name="Touch B",
+            version="1.0",
+            target_selector=TargetSelector("node_b", limit=401),
+            effects=[]
+        )
+        ok2, msg2 = interpreter.execute_rule(rule_2, world)
+        self.assertFalse(ok2, "Rule 2 must fail when tick aggregate touches exceed 1000")
+        self.assertIn("max_entities_touched_per_tick", msg2)
+
+        # Advance tick: aggregate touch counter resets to 0
+        world.advance_tick()
+        self.assertEqual(len(world.entities_touched_this_tick), 0)
+
+        # Rule 2 now runs in the new tick and succeeds
+        ok2_new, msg2_new = interpreter.execute_rule(rule_2, world)
+        self.assertTrue(ok2_new, "Rule 2 must succeed in new tick with fresh 1000 budget")
+        self.assertEqual(len(world.entities_touched_this_tick), 401)
+
 
 if __name__ == "__main__":
     unittest.main()

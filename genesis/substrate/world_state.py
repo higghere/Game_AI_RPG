@@ -44,6 +44,7 @@ class WorldState:
         self.resources: ResourceRegistry = ResourceRegistry()
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
+        self.entities_touched_this_tick: Set[int] = set()
         self.rule_registry: Optional[Any] = None
         self.rule_engine_callback: Optional[Callable[[WorldState], None]] = None
 
@@ -64,6 +65,7 @@ class WorldState:
     def advance_tick(self) -> int:
         """Execute one complete discrete simulation tick through all 5 phases."""
         current_tick = self.clock.advance_tick()
+        self.entities_touched_this_tick.clear()
 
         # Phase 0: PRE_TICK
         pre_tick_event = EventRecord(

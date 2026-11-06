@@ -84,12 +84,14 @@ class ExecutionContext:
                 f"Rule '{self.rule_id}' exceeded max_operations_per_rule: {self.max_operations}"
             )
 
-    def touch_entity(self, entity_id: int) -> None:
-        """Record an entity touched by read or write."""
+    def touch_entity(self, entity_id: int, world: WorldState) -> None:
+        """Record an entity touched by read or write, enforcing tick-wide aggregate limit."""
         self.touched_entities.add(entity_id)
-        if len(self.touched_entities) > self.max_touched_entities:
+        total_touched = len(world.entities_touched_this_tick | self.touched_entities)
+        if total_touched > self.max_touched_entities:
+            world.entities_touched_this_tick.update(self.touched_entities)
             raise QuotaExceededError(
-                f"Rule '{self.rule_id}' exceeded max_entities_touched_per_tick: {self.max_touched_entities}"
+                f"Rule '{self.rule_id}' exceeded max_entities_touched_per_tick: {self.max_touched_entities} across tick {world.clock.current_tick} (attempted {total_touched})"
             )
 
 
@@ -119,7 +121,7 @@ class GRLInterpreter:
                 all_of_type = world.entities.get_entities_by_type(sel.entity_type)
                 for ent in all_of_type:
                     # Reading an entity during selection counts as a touch
-                    ctx.touch_entity(ent.id)
+                    ctx.touch_entity(ent.id, world)
                     ctx.consume_op()
 
                     if sel.filter_expr:
@@ -146,6 +148,7 @@ class GRLInterpreter:
 
             # 4. Commit staged transactions atomically
             self._commit_transactions(ctx, world)
+            world.entities_touched_this_tick.update(ctx.touched_entities)
 
             # Record success event in journal
             success_event = EventRecord(
@@ -165,6 +168,7 @@ class GRLInterpreter:
 
         except GenesisError as exc:
             # Single-rule rollback for domain errors (quota exceeded, schema violation, etc.)
+            world.entities_touched_this_tick.update(ctx.touched_entities)
             failure_event = EventRecord(
                 tick=world.clock.current_tick,
                 phase=PHASE_GRL_RULES,
@@ -213,7 +217,7 @@ class GRLInterpreter:
             ent = ctx.variables.get(node.entity_var)
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Variable '{node.entity_var}' is not an Entity")
-            ctx.touch_entity(ent.id)
+            ctx.touch_entity(ent.id, world)
 
             # Check staged properties first
             staged_key = (ent.id, node.property_name)
@@ -233,8 +237,8 @@ class GRLInterpreter:
             tgt = ctx.variables.get(node.target_var)
             src_id = src.id if isinstance(src, Entity) else int(src)
             tgt_id = tgt.id if isinstance(tgt, Entity) else int(tgt)
-            ctx.touch_entity(src_id)
-            ctx.touch_entity(tgt_id)
+            ctx.touch_entity(src_id, world)
+            ctx.touch_entity(tgt_id, world)
             return world.relationships.has_edge(src_id, tgt_id, node.rel_type)
 
         elif isinstance(node, BinaryOpNode):
@@ -311,7 +315,7 @@ class GRLInterpreter:
             ent = ctx.variables.get(node.entity_var)
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Cannot set property on non-entity '{node.entity_var}'")
-            ctx.touch_entity(ent.id)
+            ctx.touch_entity(ent.id, world)
             new_val = self.eval_expression(node.value_expr, ctx, world)
             # Schema validation
             schema = world.schema_registry.get_schema(ent.entity_type)
@@ -323,7 +327,7 @@ class GRLInterpreter:
             ent = ctx.variables.get(node.entity_var)
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Cannot adjust property on non-entity '{node.entity_var}'")
-            ctx.touch_entity(ent.id)
+            ctx.touch_entity(ent.id, world)
             delta = self.eval_expression(node.delta_expr, ctx, world)
             staged_key = (ent.id, node.property_name)
             current_val = ctx.staged_properties.get(staged_key, ent.get_property(node.property_name))
@@ -386,8 +390,8 @@ class GRLInterpreter:
             tgt = ctx.variables.get(node.target_var)
             src_id = src.id if isinstance(src, Entity) else int(src)
             tgt_id = tgt.id if isinstance(tgt, Entity) else int(tgt)
-            ctx.touch_entity(src_id)
-            ctx.touch_entity(tgt_id)
+            ctx.touch_entity(src_id, world)
+            ctx.touch_entity(tgt_id, world)
             weight = self.eval_expression(node.weight_expr, ctx, world) if node.weight_expr else FixedPoint.from_int(1)
             ctx.staged_added_edges.append(RelationshipEdge(src_id, tgt_id, node.rel_type, weight))
 
@@ -396,8 +400,8 @@ class GRLInterpreter:
             tgt = ctx.variables.get(node.target_var)
             src_id = src.id if isinstance(src, Entity) else int(src)
             tgt_id = tgt.id if isinstance(tgt, Entity) else int(tgt)
-            ctx.touch_entity(src_id)
-            ctx.touch_entity(tgt_id)
+            ctx.touch_entity(src_id, world)
+            ctx.touch_entity(tgt_id, world)
             ctx.staged_removed_edges.append((src_id, tgt_id, node.rel_type))
 
         elif isinstance(node, ScheduleEventNode):
@@ -435,7 +439,7 @@ class GRLInterpreter:
                 ctx.consume_op()
                 tgt_ent = world.entities.get_entity(edge.target_id)
                 if tgt_ent:
-                    ctx.touch_entity(tgt_ent.id)
+                    ctx.touch_entity(tgt_ent.id, world)
                     ctx.variables[node.iterator_var] = tgt_ent
                     for child in node.body:
                         self.eval_effect(child, ctx, world)

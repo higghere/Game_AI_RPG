@@ -18,6 +18,7 @@ from genesis.core.errors import (
     InternalRuntimeError,
     QuotaExceededError,
 )
+from genesis.core.rng import GenesisRNG, derive_rule_stream
 from genesis.grl.ast import (
     AddRelationshipNode,
     AdjustPropertyNode,
@@ -68,7 +69,7 @@ class ExecutionContext:
         "staged_events",
         "staged_created_entities",
         "staged_destroyed_entities",
-        "initial_rng_state",
+        "rng",
         "initial_entities_next_id",
     )
 
@@ -77,6 +78,7 @@ class ExecutionContext:
         rule_id: str,
         world_or_config: Optional[Union[WorldState, RuntimeConfig]] = None,
         config: Optional[RuntimeConfig] = None,
+        rule_rng: Optional[GenesisRNG] = None,
     ) -> None:
         self.rule_id = rule_id
         self.operations_count = 0
@@ -109,11 +111,16 @@ class ExecutionContext:
 
         # Substrate snapshots for rollback atomicity
         if world is not None:
-            self.initial_rng_state = world.rng.get_state()
             self.initial_entities_next_id = world.entities._next_id
         else:
-            self.initial_rng_state = {}
             self.initial_entities_next_id = 1
+
+        if rule_rng is not None:
+            self.rng: Optional[GenesisRNG] = rule_rng
+        elif world is not None:
+            self.rng = derive_rule_stream(world.world_seed, world.clock.current_tick, rule_id, None, 0)
+        else:
+            self.rng = None
 
     def consume_op(self) -> None:
         """Consume 1 operation budget credit."""
@@ -149,6 +156,7 @@ class GRLInterpreter:
         world: WorldState,
         cell: Optional[Tuple[int, int]] = None,
         defer_spatial_sync: bool = False,
+        invocation_index: Optional[int] = None,
     ) -> Tuple[bool, str]:
         """Execute a rule against world state with single-rule rollback on error.
 
@@ -156,7 +164,12 @@ class GRLInterpreter:
         with a fresh per-cell operation budget.
         """
         invocation_id = f"{rule.rule_id}@{cell[0]},{cell[1]}" if cell is not None else rule.rule_id
-        ctx = ExecutionContext(invocation_id, world, self.config)
+        if invocation_index is None:
+            invocation_index = world.get_and_increment_rule_invocation_count(rule.rule_id, cell)
+        rule_rng = derive_rule_stream(
+            world.world_seed, world.clock.current_tick, rule.rule_id, cell, invocation_index
+        )
+        ctx = ExecutionContext(invocation_id, world, self.config, rule_rng=rule_rng)
         if cell is not None:
             ctx.variables["current_cell_x"] = cell[0]
             ctx.variables["current_cell_y"] = cell[1]
@@ -239,8 +252,6 @@ class GRLInterpreter:
 
         except GenesisError as exc:
             # Single-rule rollback for domain errors (quota exceeded, schema violation, etc.)
-            if ctx.initial_rng_state:
-                world.rng.set_state(ctx.initial_rng_state)
             world.entities._next_id = ctx.initial_entities_next_id
 
             # Restore any entities marked inactive during this rule
@@ -269,8 +280,6 @@ class GRLInterpreter:
 
         except Exception as exc:
             # Unexpected system / host / programming error
-            if ctx.initial_rng_state:
-                world.rng.set_state(ctx.initial_rng_state)
             world.entities._next_id = ctx.initial_entities_next_id
             for eid in ctx.staged_destroyed_entities:
                 ent = world.entities.get_entity(eid)
@@ -337,15 +346,17 @@ class GRLInterpreter:
             return world.relationships.has_edge(src_id, tgt_id, node.rel_type)
 
         elif isinstance(node, RandomIntNode):
-            return world.rng.next_int_range(node.min_val, node.max_val)
+            rng = ctx.rng if (ctx is not None and ctx.rng is not None) else world.rng
+            return rng.next_int_range(node.min_val, node.max_val)
 
         elif isinstance(node, RandomFixedNode):
+            rng = ctx.rng if (ctx is not None and ctx.rng is not None) else world.rng
             min_raw = node.min_val.raw_value
             max_raw = node.max_val.raw_value
             range_raw = max_raw - min_raw
             if range_raw == 0:
                 return node.min_val
-            draw = world.rng.next_int_range(0, range_raw)
+            draw = rng.next_int_range(0, range_raw)
             return FixedPoint.from_raw(min_raw + draw)
 
         elif isinstance(node, AggregateNode):

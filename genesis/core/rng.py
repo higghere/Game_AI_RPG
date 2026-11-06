@@ -6,12 +6,16 @@ and Python versions without relying on Python's random or NumPy.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Sequence, TypeVar
+import hashlib
+from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from genesis.core.arithmetic import FixedPoint, SCALE
 
 T = TypeVar("T")
 MASK64 = 0xFFFFFFFFFFFFFFFF
+GLOBAL_RULE_CELL_SENTINEL: Tuple[int, int] = (-9223372036854775808, -9223372036854775808)
+RULE_STREAM_DOMAIN_TAG: bytes = b"genesis/rule-stream/v1"
+FALLBACK_RNG_STATE: List[int] = [1, 1, 1, 1]
 
 
 def _rotl(x: int, k: int) -> int:
@@ -110,3 +114,74 @@ class GenesisRNG:
         self._initial_seed = int(state_dict.get("initial_seed", "0"))
         self._s = [int(w, 16) & MASK64 for w in state_dict["state"]]
         self._step_count = int(state_dict["step_count"])
+
+    @classmethod
+    def from_state(
+        cls, s0: int, s1: int, s2: int, s3: int, initial_seed: int = 0
+    ) -> GenesisRNG:
+        """Create a GenesisRNG instance directly from a 256-bit internal state vector."""
+        rng = cls.__new__(cls)
+        rng._initial_seed = initial_seed & MASK64
+        rng._s = [s0 & MASK64, s1 & MASK64, s2 & MASK64, s3 & MASK64]
+        if rng._s == [0, 0, 0, 0]:
+            rng._s = list(FALLBACK_RNG_STATE)
+        rng._step_count = 0
+        return rng
+
+
+def serialize_rule_stream_payload(
+    world_seed: int,
+    tick: int,
+    rule_id: str,
+    cell: Optional[Tuple[int, int]] = None,
+    invocation_index: int = 0,
+) -> bytes:
+    """Serialize stream derivation inputs in a fixed, unambiguous byte format."""
+    tag_bytes = RULE_STREAM_DOMAIN_TAG
+    rule_id_bytes = rule_id.encode("utf-8")
+    if cell is not None:
+        cx, cy = cell[0], cell[1]
+    else:
+        cx, cy = GLOBAL_RULE_CELL_SENTINEL
+
+    return (
+        len(tag_bytes).to_bytes(4, "big")
+        + tag_bytes
+        + (world_seed & MASK64).to_bytes(8, "big")
+        + (tick & MASK64).to_bytes(8, "big")
+        + len(rule_id_bytes).to_bytes(4, "big")
+        + rule_id_bytes
+        + cx.to_bytes(8, "big", signed=True)
+        + cy.to_bytes(8, "big", signed=True)
+        + (invocation_index & 0xFFFFFFFF).to_bytes(4, "big")
+    )
+
+
+def derive_rule_stream(
+    world_seed: int,
+    tick: int,
+    rule_id: str,
+    cell: Optional[Tuple[int, int]] = None,
+    invocation_index: int = 0,
+) -> GenesisRNG:
+    """Derive a deterministic per-invocation GenesisRNG stream from stable inputs.
+
+    Inputs:
+    - world_seed: original world seed, u64 big-endian
+    - tick: current tick, u64 big-endian
+    - rule_id: UTF-8 string with 4-byte big-endian length prefix
+    - cell: (cell_x, cell_y) signed int64 big-endian each, or sentinel pair for global rules
+    - invocation_index: u32 big-endian count of earlier invocations within this tick
+    """
+    payload = serialize_rule_stream_payload(world_seed, tick, rule_id, cell, invocation_index)
+    digest = hashlib.sha256(payload).digest()
+    s0 = int.from_bytes(digest[0:8], "big")
+    s1 = int.from_bytes(digest[8:16], "big")
+    s2 = int.from_bytes(digest[16:24], "big")
+    s3 = int.from_bytes(digest[24:32], "big")
+
+    if s0 == 0 and s1 == 0 and s2 == 0 and s3 == 0:
+        s0, s1, s2, s3 = FALLBACK_RNG_STATE
+
+    return GenesisRNG.from_state(s0, s1, s2, s3, initial_seed=world_seed)
+

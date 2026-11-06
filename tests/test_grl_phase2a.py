@@ -352,8 +352,9 @@ class TestGRLPhase2aPrimitives(unittest.TestCase):
         self.assertIn(parent.id, self.world.spatial_index.get_entities_in_cell(0, 0))
         self.assertTrue(self.world.relationships.has_edge(parent.id, 999, "parent_edge"))
 
-        # 3. RNG state must be bit-identical to pre-rule state
+        # 3. RNG state must be bit-identical to pre-rule state (and main RNG was never touched)
         self.assertEqual(self.world.rng.get_state(), initial_rng_state)
+        self.assertEqual(self.world.rng.step_count, 0, "world.rng was advanced during rule execution")
 
         # 4. Pure world substrate state hash must be 100% bit-identical
         post_rollback_hash = self.world.compute_state_hash(include_journal=False)

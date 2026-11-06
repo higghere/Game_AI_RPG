@@ -14,7 +14,8 @@ from genesis.substrate.world_state import WorldState
 
 # Committed Golden Hashes for fixed seed 20261105 across 100 ticks with active RNG (SUMMARY audit level)
 # Cross-platform invariant: free of host directories, paths, slashes, or OS-specific formats
-EXPECTED_GOLDEN_STATE_HASH = "9b7329c82e2ec0aa60fc307fa4994581937c009fc729a5f3210078e6ad6d97f9"
+# Note: EXPECTED_GOLDEN_STATE_HASH updated in Phase 2a-fix due to inclusion of canonical "world_seed" field in WorldState
+EXPECTED_GOLDEN_STATE_HASH = "54d4f3bbed956449874c10713d7dfb61a24a408975899a89285fa8fc925c5dec"
 EXPECTED_GOLDEN_JOURNAL_HASH = "3207971d4222cc9c9831df60c4f44dcf46b8b88b398d8f2ffbf358e66fb8c92b"
 
 

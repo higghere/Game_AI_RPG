@@ -11,6 +11,7 @@ import uuid
 
 from genesis.core.clock import SimulationClock
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
+from genesis.core.errors import SerializationError
 from genesis.core.rng import GenesisRNG
 from genesis.substrate.entities import EntityStorage
 from genesis.substrate.events import (
@@ -50,6 +51,7 @@ class WorldState:
         else:
             self.journal_dir: Path = Path("data/journal") / self.world_id
         self.clock: SimulationClock = SimulationClock(0)
+        self.world_seed: int = seed & 0xFFFFFFFFFFFFFFFF
         self.rng: GenesisRNG = GenesisRNG(seed)
         self._next_sequence_id: int = 1
         self.schema_registry: SchemaRegistry = SchemaRegistry()
@@ -62,11 +64,21 @@ class WorldState:
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal(journal_dir=self.journal_dir)
         self.entities_touched_this_tick: Set[int] = set()
+        self._rule_invocation_counts: Dict[Tuple[str, Optional[Tuple[int, int]]], int] = {}
         self.audit_level: str = self.config.audit_level
         self._tick_rules_executed: int = 0
         self._tick_operations_consumed: int = 0
         self.rule_registry: Optional[Any] = None
         self.rule_engine_callback: Optional[Callable[[WorldState], None]] = None
+
+    def get_and_increment_rule_invocation_count(
+        self, rule_id: str, cell: Optional[Tuple[int, int]] = None
+    ) -> int:
+        """Return the count of earlier invocations of (rule_id, cell) within the current tick and increment."""
+        key = (rule_id, cell)
+        count = self._rule_invocation_counts.get(key, 0)
+        self._rule_invocation_counts[key] = count + 1
+        return count
 
     def set_audit_level(self, new_level: str) -> None:
         """Update journal audit level and record audit_level_changed event in the journal."""
@@ -158,6 +170,7 @@ class WorldState:
         """Execute one complete discrete simulation tick through all 5 phases."""
         current_tick = self.clock.advance_tick()
         self.entities_touched_this_tick.clear()
+        self._rule_invocation_counts.clear()
         self._tick_rules_executed = 0
         self._tick_operations_consumed = 0
 
@@ -260,6 +273,7 @@ class WorldState:
         d: Dict[str, Any] = {
             "schema_version": self.config.schema_version,
             "runtime_version": self.config.runtime_version,
+            "world_seed": str(self.world_seed),
             "next_sequence_id": str(self._next_sequence_id),
             "clock": self.clock.to_dict(),
             "rng": self.rng.get_state(),
@@ -286,7 +300,13 @@ class WorldState:
         journal_dir: Optional[Union[str, Path]] = None,
     ) -> WorldState:
         """Reconstruct full world state from canonical dictionary."""
-        ws = cls(seed=0, config=config, world_id=world_id, journal_dir=journal_dir)
+        if "world_seed" not in data:
+            raise SerializationError(
+                "Missing required 'world_seed' in snapshot. Alpha does not support migration."
+            )
+        world_seed = int(data["world_seed"])
+        ws = cls(seed=world_seed, config=config, world_id=world_id, journal_dir=journal_dir)
+        ws.world_seed = world_seed
         ws._next_sequence_id = int(data.get("next_sequence_id", "1"))
         ws.clock = SimulationClock.from_dict(data["clock"])
         ws.rng.set_state(data["rng"])

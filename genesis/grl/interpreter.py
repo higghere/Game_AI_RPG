@@ -346,17 +346,23 @@ class GRLInterpreter:
             return world.relationships.has_edge(src_id, tgt_id, node.rel_type)
 
         elif isinstance(node, RandomIntNode):
-            rng = ctx.rng if (ctx is not None and ctx.rng is not None) else world.rng
-            return rng.next_int_range(node.min_val, node.max_val)
+            if ctx is None or ctx.rng is None:
+                raise GRLExecutionError(
+                    "Random evaluation requires an active rule PRNG stream in ExecutionContext"
+                )
+            return ctx.rng.next_int_range(node.min_val, node.max_val)
 
         elif isinstance(node, RandomFixedNode):
-            rng = ctx.rng if (ctx is not None and ctx.rng is not None) else world.rng
+            if ctx is None or ctx.rng is None:
+                raise GRLExecutionError(
+                    "Random evaluation requires an active rule PRNG stream in ExecutionContext"
+                )
             min_raw = node.min_val.raw_value
             max_raw = node.max_val.raw_value
             range_raw = max_raw - min_raw
             if range_raw == 0:
                 return node.min_val
-            draw = rng.next_int_range(0, range_raw)
+            draw = ctx.rng.next_int_range(0, range_raw)
             return FixedPoint.from_raw(min_raw + draw)
 
         elif isinstance(node, AggregateNode):

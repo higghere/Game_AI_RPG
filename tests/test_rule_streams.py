@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from genesis.core.arithmetic import FixedPoint
-from genesis.core.errors import DivisionByZeroError, QuotaExceededError, SerializationError
+from genesis.core.errors import DivisionByZeroError, GRLExecutionError, QuotaExceededError, SerializationError
 from genesis.core.rng import (
     FALLBACK_RNG_STATE,
     GLOBAL_RULE_CELL_SENTINEL,
@@ -676,6 +676,34 @@ class TestRuleStreams(unittest.TestCase):
 
         self.assertEqual(state_hash_1, state_hash_2, "Substrate hashes diverged between independent runs!")
         self.assertEqual(journal_hash_1, journal_hash_2, "Journal hashes diverged between independent runs!")
+
+    def test_missing_rule_stream_raises_error_and_does_not_touch_world_rng(self):
+        """Assert that evaluating random expressions without an active rule stream in ctx raises GRLExecutionError and leaves world.rng untouched."""
+        world = self._setup_organism_world(seed=555)
+        initial_rng_state = copy.deepcopy(world.rng.get_state())
+        initial_step_count = world.rng.step_count
+
+        node_int = self.parser.parse_expression({"op": "RANDOM_INT", "min": "1", "max": "100"})
+        node_fixed = self.parser.parse_expression({"op": "RANDOM_FIXED", "min": "0.100000", "max": "0.500000"})
+
+        # Context explicitly with rng=None
+        ctx_without_rng = ExecutionContext("test_no_rng", config=world.config, rule_rng=None)
+        self.assertIsNone(ctx_without_rng.rng)
+
+        # 1. RANDOM_INT must raise GRLExecutionError
+        with self.assertRaises(GRLExecutionError) as cm_int:
+            self.interpreter.eval_expression(node_int, ctx_without_rng, world)
+        self.assertIn("Random evaluation requires an active rule PRNG stream", str(cm_int.exception))
+
+        # 2. RANDOM_FIXED must raise GRLExecutionError
+        with self.assertRaises(GRLExecutionError) as cm_fixed:
+            self.interpreter.eval_expression(node_fixed, ctx_without_rng, world)
+        self.assertIn("Random evaluation requires an active rule PRNG stream", str(cm_fixed.exception))
+
+        # 3. world.rng must NEVER have been touched
+        self.assertEqual(world.rng.step_count, initial_step_count)
+        self.assertEqual(world.rng.get_state(), initial_rng_state)
+
 
 
 if __name__ == "__main__":

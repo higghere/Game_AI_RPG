@@ -352,6 +352,7 @@ All proposed additions preserve Phase 1 invariants: deterministic execution, int
     ```
   * **Semantics:** Allocates a deterministic monotonic `int64` ID via `world.next_entity_id()`. Validates initial properties against `world.schema_registry`. Stages the entity into `ctx.staged_created_entities`. Binds the new entity reference to `result_var` in `ctx.variables` for subsequent effects in the same rule.
   * **Commit Semantics:** At transaction commit, the entity is added to `world.entities` and indexed in `world.spatial_index`.
+  * **Property Value Expressions:** Every value in the `initial_properties` map MUST be a valid GRL expression node (e.g. `{"op": "LITERAL", "type": "FIXED_POINT", "value": "50.000000"}` or `{"op": "RANDOM_FIXED", ...}`). Bare literals are rejected at parse time.
   * **Metering:** Costs a base of $5$ operations plus $1$ operation per evaluated property expression. Counts as $1$ entity touch against the tick-wide 1,000-entity cap.
   * **Journaling:** Emits a domain event `entity_created` (`tick`, `entity_id`, `entity_type`, `cell_x`, `cell_y`), logged across all audit levels (`TRACE`, `SUMMARY`, `MINIMAL`).
 
@@ -418,7 +419,7 @@ All proposed additions preserve Phase 1 invariants: deterministic execution, int
       "limit": 1
     }
     ```
-  * **Semantics:** Queries entities from `collection_source` (`"cell_entities"`, `"outgoing_relationships"`, `"incoming_relationships"`). Inspects at most `max_scan` candidates (hard ceiling $\le 16$). Sorts matches deterministically by `(order_by_property, id)` and binds the top match to `result_var`. If no candidate matches, binds `None`.
+  * **Semantics:** Queries entities from `collection_source` (`"cell_entities"`, `"outgoing_relationships"`, `"incoming_relationships"`). Inspects at most `max_scan` candidates (hard ceiling $\le 16$). Sorts matches deterministically by `(order_by, id)` (using `order_direction` of `"ASC"` or `"DESC"`, defaulting to `"ASC"`) and binds the top match to `result_var`. If no candidate matches, binds `None`.
   * **Metering:** Costs $1$ operation plus filter evaluation cost per inspected candidate. Each inspected candidate counts as $1$ entity touch against the tick-wide budget.
 
 * **`AGGREGATE` (`COUNT`, `SUM`, `MIN`, `MAX`):**
@@ -812,6 +813,16 @@ All schemas and ontology definitions are externalized into JSON data declaration
       "then": [
         {
           "op": "ADJUST_PROPERTY",
+          "entity": "leader",
+          "property": "treasury",
+          "delta": {
+            "op": "DIVIDE",
+            "left": { "op": "GET_PROPERTY", "entity": "target", "property": "wealth" },
+            "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
           "entity": "target",
           "property": "wealth",
           "delta": {
@@ -822,16 +833,6 @@ All schemas and ontology definitions are externalized into JSON data declaration
               "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
             }
           }
-        },
-        {
-          "op": "ADJUST_PROPERTY",
-          "entity": "leader",
-          "property": "treasury",
-          "delta": {
-            "op": "DIVIDE",
-            "left": { "op": "GET_PROPERTY", "entity": "target", "property": "wealth" },
-            "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
-          }
         }
       ],
       "else": []
@@ -839,6 +840,7 @@ All schemas and ontology definitions are externalized into JSON data declaration
   ]
 }
 ```
+*(Note on effect ordering: The tax credit to the leader precedes the debit from the subject so that the tax calculation expression reads the pre-tax wealth value prior to staging the deduction.)*
 
 * **Missing Primitives in Phase 1:**
   1. `FIND_ENTITY` on Relationship Sets: Finding the specific leader entity referenced by outgoing `subject_of` edge to bind to `leader`.

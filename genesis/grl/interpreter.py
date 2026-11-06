@@ -111,6 +111,7 @@ class GRLInterpreter:
         rule: RuleDefinition,
         world: WorldState,
         cell: Optional[Tuple[int, int]] = None,
+        defer_spatial_sync: bool = False,
     ) -> Tuple[bool, str]:
         """Execute a rule against world state with single-rule rollback on error.
 
@@ -178,7 +179,7 @@ class GRLInterpreter:
                     self.eval_effect(effect, ctx, world)
 
             # 4. Commit staged transactions atomically
-            self._commit_transactions(ctx, world)
+            self._commit_transactions(ctx, world, defer_spatial_sync=defer_spatial_sync)
             world.entities_touched_this_tick.update(ctx.touched_entities)
 
             # Record success event in journal
@@ -478,7 +479,12 @@ class GRLInterpreter:
         else:
             raise GRLExecutionError(f"Unsupported effect node: {type(node).__name__}")
 
-    def _commit_transactions(self, ctx: ExecutionContext, world: WorldState) -> None:
+    def _commit_transactions(
+        self,
+        ctx: ExecutionContext,
+        world: WorldState,
+        defer_spatial_sync: bool = False,
+    ) -> None:
         """Apply all staged mutations to WorldState."""
         # 1. Properties
         for (ent_id, prop_name), val in ctx.staged_properties.items():
@@ -486,10 +492,10 @@ class GRLInterpreter:
             if ent:
                 ent.set_property(prop_name, val)
                 if prop_name in ("cell_x", "cell_y", "pos_x", "pos_y"):
-                    if ent.has_property("cell_x") and ent.has_property("cell_y"):
-                        world.spatial_index.place_entity(ent.id, ent.get_property("cell_x"), ent.get_property("cell_y"))
-                    elif ent.has_property("pos_x") and ent.has_property("pos_y"):
-                        world.spatial_index.place_entity(ent.id, ent.get_property("pos_x"), ent.get_property("pos_y"))
+                    if defer_spatial_sync:
+                        world.defer_spatial_sync(ent.id)
+                    else:
+                        world.sync_entity_spatial(ent.id)
 
         # 2. Resources
         for pool_name, delta in ctx.staged_resources.items():

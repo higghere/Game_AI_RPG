@@ -236,6 +236,101 @@ class TestSpatialGridSubstrate(unittest.TestCase):
         # Exactly 300 unique entities touched across the tick, within 1000 limit
         self.assertEqual(len(world.entities_touched_this_tick), 300)
 
+    def test_simultaneous_movement_prevents_double_acting_or_skipping(self):
+        """Agents moving into later or earlier cells must act exactly once per tick."""
+        config = RuntimeConfig(max_operations_per_rule=256, max_entities_touched_per_tick=1000)
+        world = WorldState(seed=4321, config=config)
+
+        schema = EntityTypeSchema("migrant")
+        schema.add_property(PropertyDefinition("cell_x", PropertyType.INT64, default_value=0))
+        schema.add_property(PropertyDefinition("cell_y", PropertyType.INT64, default_value=0))
+        schema.add_property(PropertyDefinition("action_count", PropertyType.INT64, default_value=0))
+        world.schema_registry.register_type(schema)
+
+        # Agent 1 starts in earlier cell (0, 0)
+        # Agent 2 starts in later cell (1, 1)
+        # Agent 3 starts in later cell (2, 2)
+        a1 = world.entities.create_entity("migrant", 0, {"cell_x": 0, "cell_y": 0, "action_count": 0}, world.schema_registry)
+        world.place_entity_in_cell(a1.id, 0, 0)
+
+        a2 = world.entities.create_entity("migrant", 0, {"cell_x": 1, "cell_y": 1, "action_count": 0}, world.schema_registry)
+        world.place_entity_in_cell(a2.id, 1, 1)
+
+        a3 = world.entities.create_entity("migrant", 0, {"cell_x": 2, "cell_y": 2, "action_count": 0}, world.schema_registry)
+        world.place_entity_in_cell(a3.id, 2, 2)
+
+        # Rule moves:
+        # If in cell_x == 0 -> move to (1, 1) (later cell)
+        # Else -> move to (0, 0) (earlier cell)
+        # And increments action_count by 1
+        rule_dict = {
+            "rule_id": "r_migrate_agents",
+            "name": "Migrate Agents",
+            "version": "1.0.0",
+            "priority": 10,
+            "spatial_partitioned": True,
+            "target_selector": {
+                "entity_type": "migrant",
+            },
+            "effects": [
+                {
+                    "op": "ADJUST_PROPERTY",
+                    "entity": "target",
+                    "property": "action_count",
+                    "delta": {"op": "LITERAL", "type": "INT64", "value": "1"},
+                },
+                {
+                    "op": "IF",
+                    "condition": {
+                        "op": "EQUALS",
+                        "left": {"op": "GET_PROPERTY", "entity": "target", "property": "cell_x"},
+                        "right": {"op": "LITERAL", "type": "INT64", "value": "0"},
+                    },
+                    "then": [
+                        {"op": "SET_PROPERTY", "entity": "target", "property": "cell_x", "value": {"op": "LITERAL", "type": "INT64", "value": "1"}},
+                        {"op": "SET_PROPERTY", "entity": "target", "property": "cell_y", "value": {"op": "LITERAL", "type": "INT64", "value": "1"}},
+                    ],
+                    "else": [
+                        {"op": "SET_PROPERTY", "entity": "target", "property": "cell_x", "value": {"op": "LITERAL", "type": "INT64", "value": "0"}},
+                        {"op": "SET_PROPERTY", "entity": "target", "property": "cell_y", "value": {"op": "LITERAL", "type": "INT64", "value": "0"}},
+                    ],
+                },
+            ],
+        }
+
+        parser = GRLParser()
+        world.register_rule(parser.parse_rule(rule_dict))
+
+        # --- Tick 1 Execution ---
+        world.advance_tick()
+
+        # Verify action counts after Tick 1: every agent acted EXACTLY once
+        self.assertEqual(a1.get_property("action_count"), 1, "Agent 1 (moving to later cell) must act exactly once")
+        self.assertEqual(a2.get_property("action_count"), 1, "Agent 2 (moving to earlier cell) must act exactly once")
+        self.assertEqual(a3.get_property("action_count"), 1, "Agent 3 (moving to earlier cell) must act exactly once")
+
+        # Verify new spatial index positions committed at end of rule pass
+        self.assertEqual(world.spatial_index.get_entity_cell(a1.id), (1, 1))
+        self.assertEqual(world.spatial_index.get_entity_cell(a2.id), (0, 0))
+        self.assertEqual(world.spatial_index.get_entity_cell(a3.id), (0, 0))
+
+        self.assertEqual(world.spatial_index.get_entities_in_cell(0, 0), [a2.id, a3.id])
+        self.assertEqual(world.spatial_index.get_entities_in_cell(1, 1), [a1.id])
+        self.assertEqual(world.spatial_index.get_entities_in_cell(2, 2), [])
+
+        # --- Tick 2 Execution ---
+        # Now Agent 1 is at (1, 1) and will move to (0, 0)
+        # Agents 2 and 3 are at (0, 0) and will move to (1, 1)
+        world.advance_tick()
+
+        self.assertEqual(a1.get_property("action_count"), 2, "Agent 1 must act exactly once in Tick 2")
+        self.assertEqual(a2.get_property("action_count"), 2, "Agent 2 must act exactly once in Tick 2")
+        self.assertEqual(a3.get_property("action_count"), 2, "Agent 3 must act exactly once in Tick 2")
+
+        self.assertEqual(world.spatial_index.get_entity_cell(a1.id), (0, 0))
+        self.assertEqual(world.spatial_index.get_entity_cell(a2.id), (1, 1))
+        self.assertEqual(world.spatial_index.get_entity_cell(a3.id), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

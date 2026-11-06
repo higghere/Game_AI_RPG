@@ -86,6 +86,8 @@ class RuleRegistry:
         Non-spatial rules run once globally per tick.
         Spatial-partitioned rules run once per occupied cell in deterministic
         sorted (cx, cy) cell order with a per-cell operation budget.
+        Position changes are committed at the end of the rule pass, guaranteeing
+        simultaneous movement where moving agents neither act twice nor are skipped.
         """
         active_rules = self.get_active_rules(world.clock.current_tick)
         results: List[Tuple[str, bool, str]] = []
@@ -93,10 +95,16 @@ class RuleRegistry:
             if rule.spatial_partitioned:
                 occupied_cells = world.spatial_index.get_occupied_cells()
                 for cell in occupied_cells:
-                    success, msg = self.interpreter.execute_rule(rule, world, cell=cell)
+                    success, msg = self.interpreter.execute_rule(
+                        rule, world, cell=cell, defer_spatial_sync=True
+                    )
                     results.append((f"{rule.rule_id}@{cell[0]},{cell[1]}", success, msg))
+                # Commit all position changes at the end of the rule pass for simultaneous movement
+                world.commit_pending_spatial_moves()
             else:
-                success, msg = self.interpreter.execute_rule(rule, world)
+                success, msg = self.interpreter.execute_rule(
+                    rule, world, defer_spatial_sync=False
+                )
                 results.append((rule.rule_id, success, msg))
         return results
 

@@ -44,6 +44,7 @@ class WorldState:
         self.relationships: RelationshipGraph = RelationshipGraph()
         self.resources: ResourceRegistry = ResourceRegistry()
         self.spatial_index: SpatialGridIndex = SpatialGridIndex()
+        self._pending_spatial_entities: Set[int] = set()
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
         self.entities_touched_this_tick: Set[int] = set()
@@ -93,6 +94,25 @@ class WorldState:
     def rebuild_spatial_index(self) -> None:
         """Deterministically rebuild spatial index from entity properties."""
         self.spatial_index.rebuild_from_entities(self.entities._entities)
+
+    def sync_entity_spatial(self, entity_id: int) -> None:
+        """Sync an entity's cell position in the spatial index from its properties."""
+        ent = self.entities.get_entity(entity_id)
+        if ent:
+            if ent.has_property("cell_x") and ent.has_property("cell_y"):
+                self.spatial_index.place_entity(ent.id, ent.get_property("cell_x"), ent.get_property("cell_y"))
+            elif ent.has_property("pos_x") and ent.has_property("pos_y"):
+                self.spatial_index.place_entity(ent.id, ent.get_property("pos_x"), ent.get_property("pos_y"))
+
+    def defer_spatial_sync(self, entity_id: int) -> None:
+        """Stage an entity ID for deferred spatial index synchronization at the end of a rule pass."""
+        self._pending_spatial_entities.add(entity_id)
+
+    def commit_pending_spatial_moves(self) -> None:
+        """Commit all pending spatial moves in deterministic entity_id order for simultaneous movement."""
+        for eid in sorted(self._pending_spatial_entities):
+            self.sync_entity_spatial(eid)
+        self._pending_spatial_entities.clear()
 
     def advance_tick(self) -> int:
         """Execute one complete discrete simulation tick through all 5 phases."""

@@ -49,6 +49,12 @@ An **Operation** is defined as one evaluated GRL node:
   $$\text{Sort Order} = (\text{priority} \downarrow, \text{rule\_id} \uparrow)$$
 - **Rollback Scope:** Violation of an operational quota ($\le 256$ operations, $\le 1000$ touched entities) rolls back **only the single offending rule**. Preceding and succeeding rules maintain their deterministic execution path.
 
+### 2.4 Multi-Target Precondition & Selection Semantics
+To prevent unnecessary whole-world entity touches and eliminate ambiguity in multi-target rules:
+1. **Rule Preconditions (`rule.preconditions`):** Evaluated **once globally** before any candidate entities are fetched or inspected. These express macro-environmental gates (e.g. `world.resource("sunlight") >= 1.0`). If any global precondition evaluates to `false`, the rule terminates immediately with **zero entities touched**, conserving operational budget.
+2. **Target Selector Filter (`target_selector.filter`):** Evaluated **per candidate entity** with `target` bound to that candidate. Only candidate entities satisfying this filter are queued for effect application.
+3. **Effects Execution (`rule.effects`):** Evaluated sequentially for each matched target candidate. Per-entity conditional branches within effects are expressed via `IF` nodes.
+
 ---
 
 ## 3. Data Types and JSON String Encoding Guard

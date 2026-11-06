@@ -104,8 +104,16 @@ class GRLInterpreter:
         ctx = ExecutionContext(rule.rule_id, self.config)
 
         try:
-            # 1. Target Selector
-            candidate_entities: List[Entity] = []
+            # 1. Global Preconditions Gate
+            # Evaluated once at rule level before touching any target entities.
+            # If any global precondition fails, rule exits immediately without touching entities.
+            for pre in rule.preconditions:
+                ctx.consume_op()
+                if not self.eval_expression(pre, ctx, world):
+                    return True, "Preconditions not satisfied"
+
+            # 2. Target Candidate Selection & Filtering
+            candidate_entities: List[Optional[Entity]] = []
             if rule.target_selector:
                 sel = rule.target_selector
                 all_of_type = world.entities.get_entities_by_type(sel.entity_type)
@@ -128,16 +136,7 @@ class GRLInterpreter:
                 # Rule applies to world globally without target entity
                 candidate_entities = [None]
 
-            # 2. Preconditions (evaluated once globally or per candidate)
-            # Evaluate global preconditions
-            for pre in rule.preconditions:
-                ctx.consume_op()
-                ctx.variables.setdefault("target", candidate_entities[0] if candidate_entities else None)
-                if not self.eval_expression(pre, ctx, world):
-                    # Precondition failed; clean exit with no mutations applied
-                    return True, "Preconditions not satisfied"
-
-            # 3. Apply Effects for each target candidate
+            # 3. Apply Effects for each matching target candidate
             for target_ent in candidate_entities:
                 if target_ent is not None:
                     ctx.variables["target"] = target_ent

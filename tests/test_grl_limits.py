@@ -6,7 +6,10 @@ from genesis.core.config import RuntimeConfig
 from genesis.core.errors import GRLStructuralValidationError, QuotaExceededError
 from genesis.grl.ast import (
     AdjustPropertyNode,
+    BinaryOpNode,
     ForEachNode,
+    GetPropertyNode,
+    GetResourceNode,
     LiteralNode,
     ProduceResourceNode,
     RuleDefinition,
@@ -187,6 +190,42 @@ class TestGRLLimits(unittest.TestCase):
         # Verify an internal_runtime_error event was recorded
         last_event = world.event_journal.records[-1]
         self.assertEqual(last_event.event_type, "internal_runtime_error")
+
+    def test_global_preconditions_gate_multi_target_without_touching_entities(self):
+        """Verify global preconditions evaluate before target selection, touching 0 entities if false."""
+        config = RuntimeConfig()
+        interpreter = GRLInterpreter(config)
+        world = WorldState(seed=4, config=config)
+        world.resources.create_pool("sunlight", initial_balance=FixedPoint.from_int(0))
+
+        schema = EntityTypeSchema("tree")
+        schema.add_property(PropertyDefinition("sap", PropertyType.INT64, default_value=10))
+        world.schema_registry.register_type(schema)
+
+        for _ in range(50):
+            world.entities.create_entity("tree", 0, {"sap": 10}, world.schema_registry)
+
+        rule = RuleDefinition(
+            rule_id="r_photosynthesis_gate",
+            name="Photosynthesis Gate",
+            version="1.0",
+            target_selector=TargetSelector("tree", limit=50),
+            preconditions=[
+                # Global condition: sunlight must be >= 10.0 (currently 0)
+                BinaryOpNode("GREATER_THAN_OR_EQUAL", GetResourceNode("sunlight"), LiteralNode("FIXED_POINT", FixedPoint.from_int(10)))
+            ],
+            effects=[
+                AdjustPropertyNode("target", "sap", LiteralNode("INT64", 5))
+            ]
+        )
+
+        success, msg = interpreter.execute_rule(rule, world)
+        self.assertTrue(success)
+        self.assertEqual(msg, "Preconditions not satisfied")
+
+        # Verify no tree was mutated
+        for t in world.entities.get_entities_by_type("tree"):
+            self.assertEqual(t.get_property("sap"), 10)
 
 
 if __name__ == "__main__":

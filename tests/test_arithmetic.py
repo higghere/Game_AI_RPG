@@ -1,8 +1,8 @@
 """Unit tests for GENESIS FixedPoint arithmetic and checked integer math."""
 
 import unittest
-from genesis.core.arithmetic import FixedPoint, SCALE, half_even_div, check_int64, MAX_INT64, MIN_INT64
-from genesis.core.errors import ArithmeticRangeError
+from genesis.core.arithmetic import FixedPoint, SCALE, half_even_div, half_even_mod, check_int64, MAX_INT64, MIN_INT64
+from genesis.core.errors import ArithmeticRangeError, DivisionByZeroError
 
 
 class TestArithmetic(unittest.TestCase):
@@ -110,16 +110,86 @@ class TestArithmetic(unittest.TestCase):
         with self.assertRaises(DivisionByZeroError):
             interp.eval_expression(node_div_zero, ctx, world)
 
-        # Modulo
+        # Modulo consistent with half-even division: 14 / 5 = 3, so 14 % 5 = 14 - (3 * 5) = -1
+        # Identity: 14 == 3 * 5 + (-1)
         node_mod = BinaryOpNode("MODULO", LiteralNode("INT64", 14), LiteralNode("INT64", 5))
         res_mod = interp.eval_expression(node_mod, ctx, world)
         self.assertIsInstance(res_mod, int)
-        self.assertEqual(res_mod, 4)
+        self.assertEqual(res_mod, -1)
 
         # Modulo by zero raises DivisionByZeroError
         node_mod_zero = BinaryOpNode("MODULO", LiteralNode("INT64", 14), LiteralNode("INT64", 0))
         with self.assertRaises(DivisionByZeroError):
             interp.eval_expression(node_mod_zero, ctx, world)
+
+    def test_modulo_identity(self):
+        """Test the mathematical identity: a == (a / b) * b + (a % b) for all a, b != 0."""
+        # 1. Pure integer test cases: positive, negative, odd, even, zero numerator, large values
+        test_pairs = [
+            (14, 5),
+            (10, 3),
+            (7, 2),
+            (5, 2),
+            (6, 2),
+            (0, 5),
+            (-14, 5),
+            (14, -5),
+            (-14, -5),
+            (-7, 2),
+            (7, -2),
+            (-5, 2),
+            (1000000, 333),
+            (MAX_INT64, 7),
+            (MIN_INT64, 7),
+            (-1, 2),
+            (1, 2),
+            (2, 4),
+            (6, 4),
+        ]
+
+        for a, b in test_pairs:
+            q = half_even_div(a, b)
+            rem = half_even_mod(a, b)
+            self.assertEqual(
+                a,
+                q * b + rem,
+                f"Identity failed for integer ({a}, {b}): q={q}, rem={rem}, (q*b)+rem={q*b+rem}"
+            )
+
+        # Modulo by zero raises DivisionByZeroError
+        with self.assertRaises(DivisionByZeroError):
+            half_even_mod(10, 0)
+        with self.assertRaises(DivisionByZeroError):
+            half_even_mod(-10, 0)
+        with self.assertRaises(DivisionByZeroError):
+            half_even_mod(0, 0)
+
+        # 2. FixedPoint test cases
+        fp_pairs = [
+            (FixedPoint.from_decimal_string("14.5"), FixedPoint.from_decimal_string("3.0")),
+            (FixedPoint.from_decimal_string("10.0"), FixedPoint.from_decimal_string("2.5")),
+            (FixedPoint.from_decimal_string("7.25"), FixedPoint.from_decimal_string("1.5")),
+            (FixedPoint.from_decimal_string("-14.5"), FixedPoint.from_decimal_string("3.0")),
+            (FixedPoint.from_decimal_string("14.5"), FixedPoint.from_decimal_string("-3.0")),
+            (FixedPoint.from_decimal_string("0.0"), FixedPoint.from_decimal_string("5.0")),
+            (FixedPoint.from_decimal_string("100.000001"), FixedPoint.from_decimal_string("3.0")),
+        ]
+
+        for fp_a, fp_b in fp_pairs:
+            fp_q = fp_a / fp_b
+            fp_rem = fp_a % fp_b
+            reconstructed = (fp_q * fp_b) + fp_rem
+            self.assertEqual(
+                fp_a,
+                reconstructed,
+                f"Identity failed for FixedPoint ({fp_a.to_decimal_string()}, {fp_b.to_decimal_string()}): q={fp_q.to_decimal_string()}, rem={fp_rem.to_decimal_string()}"
+            )
+
+        # FixedPoint modulo by zero raises DivisionByZeroError
+        with self.assertRaises(DivisionByZeroError):
+            _ = FixedPoint.from_int(10) % FixedPoint.from_int(0)
+        with self.assertRaises(DivisionByZeroError):
+            _ = FixedPoint.from_int(10) % 0
 
 
 if __name__ == "__main__":

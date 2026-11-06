@@ -49,6 +49,18 @@ def half_even_div(numerator: int, denominator: int) -> int:
     return check_int64(result)
 
 
+def half_even_mod(numerator: int, denominator: int) -> int:
+    """Integer modulo consistent with half_even division.
+
+    Guarantees the identity: a == (a / b) * b + (a % b)
+    """
+    if denominator == 0:
+        raise DivisionByZeroError("Modulo by zero in integer arithmetic")
+    q = half_even_div(numerator, denominator)
+    rem = numerator - (q * denominator)
+    return check_int64(rem)
+
+
 class FixedPoint:
     """64-bit signed fixed-point number with scale 1,000,000 (6 decimal places).
 
@@ -176,14 +188,14 @@ class FixedPoint:
         return NotImplemented
 
     def __mod__(self, other: Union[FixedPoint, int]) -> FixedPoint:
+        if isinstance(other, int):
+            other = FixedPoint.from_int(other)
         if isinstance(other, FixedPoint):
             if other._raw == 0:
                 raise DivisionByZeroError("Modulo by zero in FixedPoint arithmetic")
-            return FixedPoint(self._raw % other._raw)
-        if isinstance(other, int):
-            if other == 0:
-                raise DivisionByZeroError("Modulo by zero in FixedPoint arithmetic")
-            return FixedPoint(self._raw % (other * SCALE))
+            q = self / other
+            rem = self - (q * other)
+            return rem
         return NotImplemented
 
     def __neg__(self) -> FixedPoint:

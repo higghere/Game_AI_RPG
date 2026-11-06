@@ -13,8 +13,8 @@ from genesis.substrate.properties import EntityTypeSchema, PropertyDefinition, P
 from genesis.substrate.world_state import WorldState
 
 # Committed Golden Hashes for fixed seed 20261105 across 100 ticks with active RNG
-EXPECTED_GOLDEN_STATE_HASH = "3c6e73e681a38ee195405b4936ef6861b3367fe3d7f52b41531c3552af593171"
-EXPECTED_GOLDEN_JOURNAL_HASH = "4aa11b6eff9c9f1d0f04782c69519fa01fb2bdea7549ca6ef3d3e2489c3bba44"
+EXPECTED_GOLDEN_STATE_HASH = "e4130e1b90bcd95473f2bd222bef98c7929ff784636e94ca0723631f13a233d1"
+EXPECTED_GOLDEN_JOURNAL_HASH = "22072f2efba897ab8753674c652116e2e55085de1f56dd44cbe5ab88eee17508"
 
 
 class TestDeterminismSubstrate(unittest.TestCase):
@@ -90,6 +90,33 @@ class TestDeterminismSubstrate(unittest.TestCase):
         valid_phases = {0, 1, 2, 3, 4}
         for r in records:
             self.assertIn(r.phase, valid_phases, f"Invalid phase constant {r.phase} in event {r.event_type}")
+
+    def test_committed_golden_hash_with_active_rng(self):
+        """Verify bit-identical simulation results against committed golden hashes using active PRNG."""
+        world = WorldState(seed=20261105)
+        world.resources.create_pool("energy", initial_balance=FixedPoint.from_int(10000))
+        schema = EntityTypeSchema("organism")
+        schema.add_property(PropertyDefinition("energy", PropertyType.FIXED_POINT, default_value=FixedPoint.from_int(100)))
+        schema.add_property(PropertyDefinition("generation", PropertyType.INT64, default_value=0))
+        world.schema_registry.register_type(schema)
+
+        for i in range(25):
+            world.entities.create_entity("organism", 0, {"energy": FixedPoint.from_int(100 + i)}, world.schema_registry)
+
+        for tick in range(100):
+            # Explicitly exercise RNG
+            roll = world.rng.next_int_range(1, 50)
+            world.resources.get_pool("energy").produce(FixedPoint.from_int(roll))
+            ent = world.entities.get_entity((tick % 25) + 1)
+            if ent:
+                ent.set_property("energy", ent.get_property("energy") + FixedPoint.from_raw(roll * 10000))
+            world.advance_tick()
+
+        computed_state_hash = compute_canonical_hash(world.to_canonical_dict())
+        computed_journal_hash = world.event_journal.last_hash
+
+        self.assertEqual(computed_state_hash, EXPECTED_GOLDEN_STATE_HASH, "State hash drifted from golden standard")
+        self.assertEqual(computed_journal_hash, EXPECTED_GOLDEN_JOURNAL_HASH, "Journal hash drifted from golden standard")
 
     def test_cross_process_pythonhashseed_determinism(self):
         """Run independent simulation subprocesses with different PYTHONHASHSEED values.

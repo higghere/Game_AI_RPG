@@ -1,0 +1,155 @@
+{
+  "rule_id": "BR_04_HERBIVORE_GRAZING",
+  "name": "Herbivore Grazing on Autotrophs",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 60,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "herbivore",
+    "limit": 4,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "is_alive"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "1"
+        }
+      },
+      "right": {
+        "op": "AND",
+        "left": {
+          "op": "LESS_THAN",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "energy"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "500.000000"
+          }
+        },
+        "right": {
+          "op": "LESS_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "biomass"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "493.000000"
+          }
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "autotroph",
+      "result_var": "plant",
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "biomass"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "10.000000"
+          }
+        }
+      },
+      "max_scan": 4,
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "plant",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "plant",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-10.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "7.000000"
+          }
+        },
+        {
+          "op": "PRODUCE_RESOURCE",
+          "pool": "detritus",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "3.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "8.000000"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

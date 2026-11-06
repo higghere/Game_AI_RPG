@@ -1,0 +1,93 @@
+{
+  "rule_id": "BR_07_DECOMPOSITION",
+  "name": "Decomposition of Detritus",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 30,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "decomposer",
+    "limit": 5,
+    "filter": {
+      "op": "EQUALS",
+      "left": {
+        "op": "GET_PROPERTY",
+        "entity": "target",
+        "property": "is_alive"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "INT64",
+        "value": "1"
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "IF",
+      "condition": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_RESOURCE",
+          "pool": "detritus"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "5.000000"
+        }
+      },
+      "then": [
+        {
+          "op": "CONSUME_RESOURCE",
+          "pool": "detritus",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "5.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "1.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "1.000000"
+          }
+        },
+        {
+          "op": "PRODUCE_RESOURCE",
+          "pool": "soil_minerals",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "3.200000"
+          }
+        },
+        {
+          "op": "PRODUCE_RESOURCE",
+          "pool": "soil_water",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.800000"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

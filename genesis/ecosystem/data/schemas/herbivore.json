@@ -1,0 +1,13 @@
+{
+  "entity_type": "herbivore",
+  "properties": {
+    "cell_x": { "type": "INT64", "min": -10000, "max": 10000, "default": 0 },
+    "cell_y": { "type": "INT64", "min": -10000, "max": 10000, "default": 0 },
+    "energy": { "type": "FIXED_POINT", "min": "0.000000", "max": "1000.000000", "default": "100.000000" },
+    "biomass": { "type": "FIXED_POINT", "min": "0.000000", "max": "500.000000", "default": "50.000000" },
+    "age": { "type": "INT64", "min": 0, "max": 10000, "default": 0 },
+    "generation": { "type": "INT64", "min": 0, "max": 10000, "default": 0 },
+    "stomach": { "type": "FIXED_POINT", "min": "0.000000", "max": "100.000000", "default": "0.000000" },
+    "is_alive": { "type": "INT64", "min": 0, "max": 1, "default": 1 }
+  }
+}

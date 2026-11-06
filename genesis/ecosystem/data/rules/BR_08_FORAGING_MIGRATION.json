@@ -1,0 +1,130 @@
+{
+  "rule_id": "BR_08_FORAGING_MIGRATION",
+  "name": "Herbivore Foraging Migration",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 20,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "herbivore",
+    "limit": 3,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "is_alive"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "1"
+        }
+      },
+      "right": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "energy"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "1.000000"
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "autotroph",
+      "result_var": "avail_food",
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "biomass"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "5.000000"
+          }
+        }
+      },
+      "max_scan": 4,
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "avail_food",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-1.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "cell_x",
+          "delta": {
+            "op": "RANDOM_INT",
+            "min": "-1",
+            "max": "1"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "cell_y",
+          "delta": {
+            "op": "RANDOM_INT",
+            "min": "-1",
+            "max": "1"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

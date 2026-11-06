@@ -1,0 +1,147 @@
+{
+  "rule_id": "BR_02_PHOTOSYNTHESIS",
+  "name": "Autotroph Photosynthesis",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 80,
+  "spatial_partitioned": true,
+  "preconditions": [
+    {
+      "op": "GREATER_THAN_OR_EQUAL",
+      "left": {
+        "op": "GET_RESOURCE",
+        "pool": "solar_flux"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "10.000000"
+      }
+    },
+    {
+      "op": "GREATER_THAN_OR_EQUAL",
+      "left": {
+        "op": "GET_RESOURCE",
+        "pool": "soil_water"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "4.000000"
+      }
+    },
+    {
+      "op": "GREATER_THAN_OR_EQUAL",
+      "left": {
+        "op": "GET_RESOURCE",
+        "pool": "soil_minerals"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "1.000000"
+      }
+    }
+  ],
+  "target_selector": {
+    "entity_type": "autotroph",
+    "limit": 6,
+    "filter": {
+      "op": "EQUALS",
+      "left": {
+        "op": "GET_PROPERTY",
+        "entity": "target",
+        "property": "is_alive"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "INT64",
+        "value": "1"
+      }
+    }
+  },
+  "effects": [
+    {
+      "op": "IF",
+      "condition": {
+        "op": "AND",
+        "left": {
+          "op": "LESS_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "energy"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "492.000000"
+          }
+        },
+        "right": {
+          "op": "LESS_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "biomass"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "495.000000"
+          }
+        }
+      },
+      "then": [
+        {
+          "op": "CONSUME_RESOURCE",
+          "pool": "solar_flux",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "10.000000"
+          }
+        },
+        {
+          "op": "CONSUME_RESOURCE",
+          "pool": "soil_water",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "4.000000"
+          }
+        },
+        {
+          "op": "CONSUME_RESOURCE",
+          "pool": "soil_minerals",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "1.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "8.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "5.000000"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

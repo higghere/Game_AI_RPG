@@ -1,0 +1,67 @@
+{
+  "rule_id": "BR_05_STARVATION_DEATH",
+  "name": "Starvation and Mortality Recycling",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 50,
+  "spatial_partitioned": true,
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FOR_EACH",
+      "collection_source": "cell_entities",
+      "iterator_var": "organism",
+      "max_iterations": 16,
+      "body": [
+        {
+          "op": "IF",
+          "condition": {
+            "op": "AND",
+            "left": {
+              "op": "EQUALS",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "organism",
+                "property": "is_alive"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "right": {
+              "op": "LESS_THAN_OR_EQUAL",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "organism",
+                "property": "energy"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "0.000000"
+              }
+            }
+          },
+          "then": [
+            {
+              "op": "PRODUCE_RESOURCE",
+              "pool": "detritus",
+              "amount": {
+                "op": "GET_PROPERTY",
+                "entity": "organism",
+                "property": "biomass"
+              }
+            },
+            {
+              "op": "DESTROY_ENTITY",
+              "entity": "organism"
+            }
+          ],
+          "else": []
+        }
+      ]
+    }
+  ]
+}

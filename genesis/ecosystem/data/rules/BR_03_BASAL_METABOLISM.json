@@ -1,0 +1,175 @@
+{
+  "rule_id": "BR_03_BASAL_METABOLISM",
+  "name": "Basal Respiration and Maintenance",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 70,
+  "spatial_partitioned": true,
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FOR_EACH",
+      "collection_source": "cell_entities",
+      "iterator_var": "organism",
+      "max_iterations": 10,
+      "body": [
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "organism",
+              "property": "is_alive"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "IF",
+              "condition": {
+                "op": "GREATER_THAN_OR_EQUAL",
+                "left": {
+                  "op": "GET_PROPERTY",
+                  "entity": "organism",
+                  "property": "energy"
+                },
+                "right": {
+                  "op": "LITERAL",
+                  "type": "FIXED_POINT",
+                  "value": "2.000000"
+                }
+              },
+              "then": [
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "organism",
+                  "property": "energy",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "-2.000000"
+                  }
+                },
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "organism",
+                  "property": "age",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "INT64",
+                    "value": "1"
+                  }
+                },
+                {
+                  "op": "IF",
+                  "condition": {
+                    "op": "GREATER_THAN_OR_EQUAL",
+                    "left": {
+                      "op": "GET_PROPERTY",
+                      "entity": "organism",
+                      "property": "biomass"
+                    },
+                    "right": {
+                      "op": "LITERAL",
+                      "type": "FIXED_POINT",
+                      "value": "0.100000"
+                    }
+                  },
+                  "then": [
+                    {
+                      "op": "ADJUST_PROPERTY",
+                      "entity": "organism",
+                      "property": "biomass",
+                      "delta": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "-0.100000"
+                      }
+                    },
+                    {
+                      "op": "PRODUCE_RESOURCE",
+                      "pool": "detritus",
+                      "amount": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "0.100000"
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "op": "PRODUCE_RESOURCE",
+                      "pool": "detritus",
+                      "amount": {
+                        "op": "GET_PROPERTY",
+                        "entity": "organism",
+                        "property": "biomass"
+                      }
+                    },
+                    {
+                      "op": "SET_PROPERTY",
+                      "entity": "organism",
+                      "property": "biomass",
+                      "value": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "0.000000"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "op": "SET_PROPERTY",
+                  "entity": "organism",
+                  "property": "energy",
+                  "value": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "0.000000"
+                  }
+                },
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "organism",
+                  "property": "age",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "INT64",
+                    "value": "1"
+                  }
+                },
+                {
+                  "op": "PRODUCE_RESOURCE",
+                  "pool": "detritus",
+                  "amount": {
+                    "op": "GET_PROPERTY",
+                    "entity": "organism",
+                    "property": "biomass"
+                  }
+                },
+                {
+                  "op": "SET_PROPERTY",
+                  "entity": "organism",
+                  "property": "biomass",
+                  "value": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "0.000000"
+                  }
+                }
+              ]
+            }
+          ],
+          "else": []
+        }
+      ]
+    }
+  ]
+}

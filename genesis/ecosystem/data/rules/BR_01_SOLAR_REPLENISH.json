@@ -1,0 +1,33 @@
+{
+  "rule_id": "BR_01_SOLAR_REPLENISH",
+  "name": "Solar Flux Replenishment",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 100,
+  "spatial_partitioned": false,
+  "preconditions": [
+    {
+      "op": "LESS_THAN_OR_EQUAL",
+      "left": {
+        "op": "GET_RESOURCE",
+        "pool": "solar_flux"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "900000.000000"
+      }
+    }
+  ],
+  "effects": [
+    {
+      "op": "PRODUCE_RESOURCE",
+      "pool": "solar_flux",
+      "amount": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "100000.000000"
+      }
+    }
+  ]
+}

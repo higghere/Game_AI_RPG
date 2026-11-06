@@ -1,0 +1,513 @@
+{
+  "rule_id": "BR_06_REPRODUCTION",
+  "name": "Mass-Preserving Organism Fission",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 40,
+  "spatial_partitioned": true,
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "autotroph",
+      "result_var": "parent_auto",
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "AND",
+          "left": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "energy"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "100.000000"
+            }
+          },
+          "right": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "biomass"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "50.000000"
+            }
+          }
+        }
+      },
+      "max_scan": 4,
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "parent_auto",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "CREATE_ENTITY",
+          "entity_type": "autotroph",
+          "result_var": "child_auto",
+          "initial_properties": {
+            "cell_x": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_auto",
+              "property": "cell_x"
+            },
+            "cell_y": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_auto",
+              "property": "cell_y"
+            },
+            "energy": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_auto",
+                "property": "energy"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "biomass": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_auto",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "hydration": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "50.000000"
+            },
+            "age": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            },
+            "generation": {
+              "op": "ADD",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_auto",
+                "property": "generation"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "is_alive": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_auto",
+          "property": "biomass",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_auto",
+              "property": "biomass"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_auto",
+          "property": "energy",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_auto",
+              "property": "energy"
+            }
+          }
+        }
+      ],
+      "else": []
+    },
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "herbivore",
+      "result_var": "parent_herb",
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "AND",
+          "left": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "energy"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "200.000000"
+            }
+          },
+          "right": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "biomass"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "100.000000"
+            }
+          }
+        }
+      },
+      "max_scan": 4,
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "parent_herb",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "CREATE_ENTITY",
+          "entity_type": "herbivore",
+          "result_var": "child_herb",
+          "initial_properties": {
+            "cell_x": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_herb",
+              "property": "cell_x"
+            },
+            "cell_y": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_herb",
+              "property": "cell_y"
+            },
+            "energy": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_herb",
+                "property": "energy"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "biomass": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_herb",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "stomach": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.000000"
+            },
+            "age": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            },
+            "generation": {
+              "op": "ADD",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_herb",
+                "property": "generation"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "is_alive": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_herb",
+          "property": "biomass",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_herb",
+              "property": "biomass"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_herb",
+          "property": "energy",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_herb",
+              "property": "energy"
+            }
+          }
+        }
+      ],
+      "else": []
+    },
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "decomposer",
+      "result_var": "parent_decomp",
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "candidate",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "AND",
+          "left": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "energy"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "100.000000"
+            }
+          },
+          "right": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "biomass"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "50.000000"
+            }
+          }
+        }
+      },
+      "max_scan": 4,
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "parent_decomp",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "CREATE_ENTITY",
+          "entity_type": "decomposer",
+          "result_var": "child_decomp",
+          "initial_properties": {
+            "cell_x": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_decomp",
+              "property": "cell_x"
+            },
+            "cell_y": {
+              "op": "GET_PROPERTY",
+              "entity": "parent_decomp",
+              "property": "cell_y"
+            },
+            "energy": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_decomp",
+                "property": "energy"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "biomass": {
+              "op": "DIVIDE",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_decomp",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "2.000000"
+              }
+            },
+            "age": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            },
+            "generation": {
+              "op": "ADD",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "parent_decomp",
+                "property": "generation"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "is_alive": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_decomp",
+          "property": "biomass",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_decomp",
+              "property": "biomass"
+            }
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "parent_decomp",
+          "property": "energy",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "child_decomp",
+              "property": "energy"
+            }
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

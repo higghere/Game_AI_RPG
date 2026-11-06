@@ -13,7 +13,7 @@ from genesis.substrate.properties import EntityTypeSchema, PropertyDefinition, P
 from genesis.substrate.world_state import WorldState
 
 # Committed Golden Hashes for fixed seed 20261105 across 100 ticks with active RNG
-EXPECTED_GOLDEN_STATE_HASH = "e4130e1b90bcd95473f2bd222bef98c7929ff784636e94ca0723631f13a233d1"
+EXPECTED_GOLDEN_STATE_HASH = "7faf2f6b9ff850da0a96d1648df1f4ab435e3b0feacc67da6856de2d0aadd82b"
 EXPECTED_GOLDEN_JOURNAL_HASH = "22072f2efba897ab8753674c652116e2e55085de1f56dd44cbe5ab88eee17508"
 
 

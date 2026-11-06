@@ -108,8 +108,8 @@ class SpatialGridIndex:
             for cy in range(center_y - radius, center_y + radius + 1):
                 cell = (cx, cy)
                 if cell in self._cell_to_entities:
-                    result.extend(sorted(self._cell_to_entities[cell]))
-        return result
+                    result.extend(self._cell_to_entities[cell])
+        return sorted(set(result))
 
     def rebuild_from_entities(self, entities: Dict[int, Any]) -> None:
         """Deterministically rebuild spatial index from entity properties."""

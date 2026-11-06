@@ -81,12 +81,23 @@ class RuleRegistry:
         return sorted(active, key=lambda r: (-r.priority, r.rule_id))
 
     def execute_active_rules(self, world: WorldState) -> List[Tuple[str, bool, str]]:
-        """Execute all active rules in deterministic priority order."""
+        """Execute all active rules in deterministic priority order.
+
+        Non-spatial rules run once globally per tick.
+        Spatial-partitioned rules run once per occupied cell in deterministic
+        sorted (cx, cy) cell order with a per-cell operation budget.
+        """
         active_rules = self.get_active_rules(world.clock.current_tick)
         results: List[Tuple[str, bool, str]] = []
         for rule in active_rules:
-            success, msg = self.interpreter.execute_rule(rule, world)
-            results.append((rule.rule_id, success, msg))
+            if rule.spatial_partitioned:
+                occupied_cells = world.spatial_index.get_occupied_cells()
+                for cell in occupied_cells:
+                    success, msg = self.interpreter.execute_rule(rule, world, cell=cell)
+                    results.append((f"{rule.rule_id}@{cell[0]},{cell[1]}", success, msg))
+            else:
+                success, msg = self.interpreter.execute_rule(rule, world)
+                results.append((rule.rule_id, success, msg))
         return results
 
     def to_canonical_dict(self) -> Dict[str, Any]:

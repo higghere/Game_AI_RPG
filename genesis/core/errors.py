@@ -55,3 +55,7 @@ class SerializationError(GenesisError):
 
 class SecurityViolationError(GenesisError):
     """Raised when an escape attempt, unauthorized path, or tampering is detected."""
+
+
+class InternalRuntimeError(GenesisError):
+    """Raised when an unexpected non-GENESIS exception occurs in the engine."""

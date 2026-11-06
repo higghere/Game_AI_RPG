@@ -15,6 +15,7 @@ from genesis.core.errors import (
     DivisionByZeroError,
     GenesisError,
     GRLExecutionError,
+    InternalRuntimeError,
     QuotaExceededError,
 )
 from genesis.grl.ast import (
@@ -163,8 +164,8 @@ class GRLInterpreter:
             world.event_journal.append(success_event)
             return True, "Executed successfully"
 
-        except Exception as exc:
-            # Single-rule rollback: discard staging buffers entirely
+        except GenesisError as exc:
+            # Single-rule rollback for domain errors (quota exceeded, schema violation, etc.)
             failure_event = EventRecord(
                 tick=world.clock.current_tick,
                 phase=PHASE_GRL_RULES,
@@ -181,6 +182,26 @@ class GRLInterpreter:
             )
             world.event_journal.append(failure_event)
             return False, f"{type(exc).__name__}: {str(exc)}"
+
+        except Exception as exc:
+            # Unexpected system / host / programming error: do not silently swallow
+            internal_event = EventRecord(
+                tick=world.clock.current_tick,
+                phase=PHASE_GRL_RULES,
+                priority=rule.priority,
+                sequence_id=world.next_sequence_id(),
+                event_type="internal_runtime_error",
+                payload={
+                    "rule_id": rule.rule_id,
+                    "error_type": "InternalRuntimeError",
+                    "original_error": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
+            world.event_journal.append(internal_event)
+            raise InternalRuntimeError(
+                f"Internal runtime engine error in rule '{rule.rule_id}': {type(exc).__name__}: {str(exc)}"
+            ) from exc
 
     def eval_expression(self, node: GRLNode, ctx: ExecutionContext, world: WorldState) -> Any:
         """Evaluate an expression node."""

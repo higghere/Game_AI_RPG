@@ -5,10 +5,12 @@ from genesis.core.clock import SimulationClock
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
 from genesis.core.errors import (
     ArithmeticRangeError,
+    DivisionByZeroError,
     GenesisError,
     GRLExecutionError,
     GRLStructuralValidationError,
     GRLValidationError,
+    InternalRuntimeError,
     InvariantViolationError,
     PropertySchemaValidationError,
     PropertyValueOutOfBoundsError,

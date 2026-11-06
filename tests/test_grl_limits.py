@@ -152,6 +152,42 @@ class TestGRLLimits(unittest.TestCase):
         self.assertFalse(success_over)
         self.assertIn("max_entities_touched_per_tick", msg_over)
 
+    def test_catch_only_genesis_errors_and_report_internal_error(self):
+        """Verify execute_rule catches GenesisError gracefully but re-raises unexpected exceptions as InternalRuntimeError."""
+        from genesis.core.errors import InternalRuntimeError
+        from genesis.grl.ast import GRLNode
+
+        config = RuntimeConfig()
+        interpreter = GRLInterpreter(config)
+        world = WorldState(seed=3, config=config)
+
+        class UnexpectedHostFailureNode(GRLNode):
+            pass
+
+        original_eval_effect = interpreter.eval_effect
+
+        def broken_eval_effect(node, ctx, w):
+            if isinstance(node, UnexpectedHostFailureNode):
+                raise TypeError("Simulated unexpected host error")
+            return original_eval_effect(node, ctx, w)
+
+        interpreter.eval_effect = broken_eval_effect
+
+        rule = RuleDefinition(
+            rule_id="r_unexpected",
+            name="Unexpected Bug Rule",
+            version="1.0",
+            effects=[UnexpectedHostFailureNode()]
+        )
+
+        with self.assertRaises(InternalRuntimeError) as ctx:
+            interpreter.execute_rule(rule, world)
+
+        self.assertIn("Internal runtime engine error", str(ctx.exception))
+        # Verify an internal_runtime_error event was recorded
+        last_event = world.event_journal.records[-1]
+        self.assertEqual(last_event.event_type, "internal_runtime_error")
+
 
 if __name__ == "__main__":
     unittest.main()

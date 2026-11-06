@@ -17,6 +17,7 @@ from genesis.grl.ast import (
     UnaryOpNode,
 )
 from genesis.grl.interpreter import GRLInterpreter
+from genesis.grl.parser import GRLParser
 from genesis.grl.registry import RuleRegistry
 from genesis.grl.validator import GRLValidator
 from genesis.substrate.properties import EntityTypeSchema, PropertyDefinition, PropertyType
@@ -322,6 +323,111 @@ class TestGRLLimits(unittest.TestCase):
         ok2_new, msg2_new = interpreter.execute_rule(rule_2, world)
         self.assertTrue(ok2_new, "Rule 2 must succeed in new tick with fresh 1000 budget")
         self.assertEqual(len(world.entities_touched_this_tick), 401)
+
+    def test_priority_execution_order_with_dependent_rules(self):
+        """Verify rules execute strictly by (-priority, rule_id) order and dependent rules resolve correctly."""
+        # Scenario 1: Correct priority order (Rule A priority 20 > Rule B priority 10)
+        # Rule A produces biomass; Rule B depends on that biomass being present.
+        world = WorldState(seed=101)
+        world.resources.create_pool("biomass", initial_balance=FixedPoint.from_int(0))
+
+        schema = EntityTypeSchema("herbivore")
+        schema.add_property(PropertyDefinition("energy", PropertyType.INT64, default_value=50))
+        world.schema_registry.register_type(schema)
+        agent = world.entities.create_entity("herbivore", 0, {"energy": 50}, world.schema_registry)
+
+        parser = GRLParser()
+
+        # Rule A: High Priority (20) -> Produces 10 biomass
+        rule_A_dict = {
+            "rule_id": "r_prod_biomass",
+            "name": "Produce Biomass",
+            "version": "1.0.0",
+            "priority": 20,
+            "effects": [
+                {
+                    "op": "PRODUCE_RESOURCE",
+                    "pool": "biomass",
+                    "amount": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                }
+            ],
+        }
+
+        # Rule B: Lower Priority (10) -> Depends on biomass >= 10, consumes it, boosts agent energy
+        rule_B_dict = {
+            "rule_id": "r_feed_herbivore",
+            "name": "Feed Herbivore",
+            "version": "1.0.0",
+            "priority": 10,
+            "target_selector": {
+                "entity_type": "herbivore",
+            },
+            "preconditions": [
+                {
+                    "op": "GREATER_THAN_OR_EQUAL",
+                    "left": {"op": "GET_RESOURCE", "pool": "biomass"},
+                    "right": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                }
+            ],
+            "effects": [
+                {
+                    "op": "CONSUME_RESOURCE",
+                    "pool": "biomass",
+                    "amount": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                },
+                {
+                    "op": "ADJUST_PROPERTY",
+                    "entity": "target",
+                    "property": "energy",
+                    "delta": {"op": "LITERAL", "type": "INT64", "value": "25"},
+                },
+            ],
+        }
+
+        world.register_rule(parser.parse_rule(rule_A_dict))
+        world.register_rule(parser.parse_rule(rule_B_dict))
+
+        # Advance tick: rules activate and execute in Phase 2
+        world.advance_tick()
+
+        # Rule A executed first (producing 10 biomass), then Rule B executed (finding 10 biomass,
+        # consuming it, and boosting herbivore energy from 50 to 75).
+        self.assertEqual(agent.get_property("energy"), 75, "Rule B must succeed because Rule A ran first")
+        self.assertEqual(world.resources.get_pool("biomass").balance.to_decimal_string(), "0.000000")
+
+        # Verify journal recorded events in priority order
+        rule_events = [e for e in world.event_journal.records if e.event_type == "rule_executed_success"]
+        self.assertEqual(len(rule_events), 2)
+        self.assertEqual(rule_events[0].payload["rule_id"], "r_prod_biomass")
+        self.assertEqual(rule_events[0].priority, 20)
+        self.assertEqual(rule_events[1].payload["rule_id"], "r_feed_herbivore")
+        self.assertEqual(rule_events[1].priority, 10)
+        self.assertLess(rule_events[0].sequence_id, rule_events[1].sequence_id)
+
+        # Scenario 2: Inverted priority (Rule B priority 20 > Rule A priority 10)
+        # Rule B runs FIRST: biomass is 0, so its precondition fails.
+        # Rule A runs SECOND: produces 10 biomass.
+        world_inv = WorldState(seed=102)
+        world_inv.resources.create_pool("biomass", initial_balance=FixedPoint.from_int(0))
+        world_inv.schema_registry.register_type(schema)
+        agent_inv = world_inv.entities.create_entity("herbivore", 0, {"energy": 50}, world_inv.schema_registry)
+
+        rule_B_high = parser.parse_rule(rule_B_dict)
+        rule_B_high.priority = 20  # Now higher priority!
+
+        rule_A_low = parser.parse_rule(rule_A_dict)
+        rule_A_low.priority = 10   # Now lower priority!
+
+        world_inv.register_rule(rule_B_high)
+        world_inv.register_rule(rule_A_low)
+
+        world_inv.advance_tick()
+
+        # Because Rule B ran first when biomass was 0, its precondition failed!
+        # Herbivore energy remains 50.
+        self.assertEqual(agent_inv.get_property("energy"), 50, "Rule B must not execute because biomass was not yet produced")
+        # Rule A ran second, so biomass was produced and left at 10.
+        self.assertEqual(world_inv.resources.get_pool("biomass").balance.to_decimal_string(), "10.000000")
 
 
 if __name__ == "__main__":

@@ -387,6 +387,9 @@ class TestGRLLimits(unittest.TestCase):
         world.register_rule(parser.parse_rule(rule_A_dict))
         world.register_rule(parser.parse_rule(rule_B_dict))
 
+        # Enable TRACE audit level to verify fine-grained rule_executed_success events
+        world.set_audit_level("TRACE")
+
         # Advance tick: rules activate and execute in Phase 2
         world.advance_tick()
 

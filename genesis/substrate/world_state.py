@@ -12,6 +12,10 @@ from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
 from genesis.core.rng import GenesisRNG
 from genesis.substrate.entities import EntityStorage
 from genesis.substrate.events import (
+    AUDIT_LEVEL_MINIMAL,
+    AUDIT_LEVEL_SUMMARY,
+    AUDIT_LEVEL_TRACE,
+    VALID_AUDIT_LEVELS,
     EventJournal,
     EventQueue,
     EventRecord,
@@ -48,8 +52,34 @@ class WorldState:
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
         self.entities_touched_this_tick: Set[int] = set()
+        self.audit_level: str = self.config.audit_level
+        self._tick_rules_executed: int = 0
+        self._tick_operations_consumed: int = 0
         self.rule_registry: Optional[Any] = None
         self.rule_engine_callback: Optional[Callable[[WorldState], None]] = None
+
+    def set_audit_level(self, new_level: str) -> None:
+        """Update journal audit level and record audit_level_changed event in the journal."""
+        new_level = new_level.upper()
+        if new_level not in VALID_AUDIT_LEVELS:
+            raise ValueError(f"Invalid audit level: '{new_level}'. Must be one of {VALID_AUDIT_LEVELS}")
+        if new_level != self.audit_level:
+            old_level = self.audit_level
+            change_event = EventRecord(
+                tick=self.clock.current_tick,
+                phase=PHASE_PRE_TICK,
+                priority=100,
+                sequence_id=self.next_sequence_id(),
+                event_type="audit_level_changed",
+                payload={"from_level": old_level, "to_level": new_level},
+            )
+            self.event_journal.append(change_event)
+            self.audit_level = new_level
+
+    def record_routine_rule_success(self, operations: int, entities_touched: int) -> None:
+        """Accumulate routine rule metrics for tick_digest in SUMMARY/MINIMAL modes."""
+        self._tick_rules_executed += 1
+        self._tick_operations_consumed += operations
 
     def register_rule(self, rule: Any) -> str:
         """Register a rule prospectively, hashing full canonical body and writing rule_installed event."""
@@ -118,22 +148,24 @@ class WorldState:
         """Execute one complete discrete simulation tick through all 5 phases."""
         current_tick = self.clock.advance_tick()
         self.entities_touched_this_tick.clear()
+        self._tick_rules_executed = 0
+        self._tick_operations_consumed = 0
 
         # Phase 0: PRE_TICK
-        pre_tick_event = EventRecord(
-            tick=current_tick,
-            phase=PHASE_PRE_TICK,
-            priority=100,
-            sequence_id=self.next_sequence_id(),
-            event_type="tick_started",
-            payload={"tick": str(current_tick)},
-        )
-        self.event_journal.append(pre_tick_event)
+        if self.audit_level == AUDIT_LEVEL_TRACE:
+            pre_tick_event = EventRecord(
+                tick=current_tick,
+                phase=PHASE_PRE_TICK,
+                priority=100,
+                sequence_id=self.next_sequence_id(),
+                event_type="tick_started",
+                payload={"tick": str(current_tick)},
+            )
+            self.event_journal.append(pre_tick_event)
 
-        # Phase 1: PERCEPTION_EVENTS
+        # Phase 1: PERCEPTION_EVENTS (Domain events are always logged individually at every level)
         events = self.event_queue.drain_for_tick_phase(current_tick, PHASE_PERCEPTION_EVENTS)
         for ev in events:
-            # Commit event to journal
             self.event_journal.append(ev)
 
         # Phase 2: GRL_RULES
@@ -144,26 +176,48 @@ class WorldState:
 
         # Phase 3: RESOURCE_SETTLEMENT
         self.resources.audit_invariants()
-        settlement_event = EventRecord(
-            tick=current_tick,
-            phase=PHASE_RESOURCE_SETTLEMENT,
-            priority=0,
-            sequence_id=self.next_sequence_id(),
-            event_type="resource_settlement_audited",
-            payload={"tick": str(current_tick)},
-        )
-        self.event_journal.append(settlement_event)
+        if self.audit_level == AUDIT_LEVEL_TRACE:
+            settlement_event = EventRecord(
+                tick=current_tick,
+                phase=PHASE_RESOURCE_SETTLEMENT,
+                priority=0,
+                sequence_id=self.next_sequence_id(),
+                event_type="resource_settlement_audited",
+                payload={"tick": str(current_tick)},
+            )
+            self.event_journal.append(settlement_event)
 
         # Phase 4: POST_TICK
-        post_tick_event = EventRecord(
-            tick=current_tick,
-            phase=PHASE_POST_TICK,
-            priority=-100,
-            sequence_id=self.next_sequence_id(),
-            event_type="tick_completed",
-            payload={"tick": str(current_tick)},
-        )
-        self.event_journal.append(post_tick_event)
+        if self.audit_level == AUDIT_LEVEL_TRACE:
+            post_tick_event = EventRecord(
+                tick=current_tick,
+                phase=PHASE_POST_TICK,
+                priority=-100,
+                sequence_id=self.next_sequence_id(),
+                event_type="tick_completed",
+                payload={"tick": str(current_tick)},
+            )
+            self.event_journal.append(post_tick_event)
+        else:
+            # In SUMMARY and MINIMAL, routine rule successes and tick boundaries collapse into one deterministic tick_digest
+            digest_payload: Dict[str, Any] = {
+                "tick": str(current_tick),
+                "audit_level": self.audit_level,
+            }
+            if self.audit_level == AUDIT_LEVEL_SUMMARY:
+                digest_payload["rules_executed"] = str(self._tick_rules_executed)
+                digest_payload["operations_consumed"] = str(self._tick_operations_consumed)
+                digest_payload["entities_touched"] = str(len(self.entities_touched_this_tick))
+
+            digest_event = EventRecord(
+                tick=current_tick,
+                phase=PHASE_POST_TICK,
+                priority=0,
+                sequence_id=self.next_sequence_id(),
+                event_type="tick_digest",
+                payload=digest_payload,
+            )
+            self.event_journal.append(digest_event)
 
         return current_tick
 
@@ -180,6 +234,7 @@ class WorldState:
             "relationships": self.relationships.to_dict(),
             "resources": self.resources.to_dict(),
             "spatial_index": self.spatial_index.to_dict(),
+            "audit_level": self.audit_level,
             "event_queue": self.event_queue.to_dict(),
             "event_journal": self.event_journal.to_dict(),
             "rules": self.rule_registry.to_canonical_dict() if self.rule_registry else {},
@@ -193,6 +248,7 @@ class WorldState:
         ws.clock = SimulationClock.from_dict(data["clock"])
         ws.rng.set_state(data["rng"])
         ws.schema_registry = SchemaRegistry.from_dict(data.get("schemas", {}))
+        ws.audit_level = data.get("audit_level", ws.config.audit_level)
         ws.entities = EntityStorage.from_dict(data["entities"])
         ws.relationships = RelationshipGraph.from_dict(data["relationships"])
         ws.resources = ResourceRegistry.from_dict(data["resources"])

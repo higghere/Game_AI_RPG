@@ -182,20 +182,25 @@ class GRLInterpreter:
             self._commit_transactions(ctx, world, defer_spatial_sync=defer_spatial_sync)
             world.entities_touched_this_tick.update(ctx.touched_entities)
 
-            # Record success event in journal
-            success_event = EventRecord(
-                tick=world.clock.current_tick,
-                phase=PHASE_GRL_RULES,
-                priority=rule.priority,
-                sequence_id=world.next_sequence_id(),
-                event_type="rule_executed_success",
-                payload={
-                    "rule_id": rule.rule_id,
-                    "operations_consumed": str(ctx.operations_count),
-                    "entities_touched": str(len(ctx.touched_entities)),
-                },
-            )
-            world.event_journal.append(success_event)
+            # Record success event in journal: in TRACE mode, record individually;
+            # in SUMMARY / MINIMAL mode, accumulate for tick_digest
+            if world.audit_level == "TRACE":
+                success_event = EventRecord(
+                    tick=world.clock.current_tick,
+                    phase=PHASE_GRL_RULES,
+                    priority=rule.priority,
+                    sequence_id=world.next_sequence_id(),
+                    event_type="rule_executed_success",
+                    payload={
+                        "rule_id": invocation_id,
+                        "operations_consumed": str(ctx.operations_count),
+                        "entities_touched": str(len(ctx.touched_entities)),
+                    },
+                )
+                world.event_journal.append(success_event)
+            else:
+                world.record_routine_rule_success(ctx.operations_count, len(ctx.touched_entities))
+
             return True, "Executed successfully"
 
         except GenesisError as exc:
@@ -208,7 +213,7 @@ class GRLInterpreter:
                 sequence_id=world.next_sequence_id(),
                 event_type="rule_execution_failed",
                 payload={
-                    "rule_id": rule.rule_id,
+                    "rule_id": invocation_id,
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
                     "operations_consumed": str(ctx.operations_count),

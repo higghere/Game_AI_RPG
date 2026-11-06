@@ -42,5 +42,8 @@ class RuntimeConfig:
     runtime_version: str = "0.3.0"
     schema_version: str = "1.0.0"
 
+    # Journal & Audit Policy
+    audit_level: str = "SUMMARY"  # MINIMAL, SUMMARY, TRACE
+
 
 DEFAULT_CONFIG: Final[RuntimeConfig] = RuntimeConfig()

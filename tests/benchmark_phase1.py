@@ -152,9 +152,13 @@ def run_benchmark(num_ticks: int = 100, num_agents: int = 300, num_cells: int = 
     total_ops = 0
     total_rule_executions = 0
     for record in world.event_journal.records:
-        if record.event_type == "rule_executed_success" and record.tick > 1:
-            total_ops += int(record.payload.get("operations_consumed", 0))
-            total_rule_executions += 1
+        if record.tick > 1:
+            if record.event_type == "tick_digest":
+                total_ops += int(record.payload.get("operations_consumed", 0))
+                total_rule_executions += int(record.payload.get("rules_executed", 0))
+            elif record.event_type == "rule_executed_success":
+                total_ops += int(record.payload.get("operations_consumed", 0))
+                total_rule_executions += 1
 
     ops_per_second = total_ops / elapsed_time if elapsed_time > 0 else 0
     ticks_per_second = num_ticks / elapsed_time if elapsed_time > 0 else 0

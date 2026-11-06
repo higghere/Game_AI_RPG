@@ -52,6 +52,7 @@ class ExecutionContext:
         "operations_count",
         "max_operations",
         "touched_entities",
+        "new_world_touches",
         "max_touched_entities",
         "variables",
         "staged_properties",
@@ -66,6 +67,7 @@ class ExecutionContext:
         self.operations_count = 0
         self.max_operations = config.max_operations_per_rule
         self.touched_entities: Set[int] = set()
+        self.new_world_touches: int = 0
         self.max_touched_entities = config.max_entities_touched_per_tick
         self.variables: Dict[str, Any] = {}
 
@@ -85,14 +87,17 @@ class ExecutionContext:
             )
 
     def touch_entity(self, entity_id: int, world: WorldState) -> None:
-        """Record an entity touched by read or write, enforcing tick-wide aggregate limit."""
-        self.touched_entities.add(entity_id)
-        total_touched = len(world.entities_touched_this_tick | self.touched_entities)
-        if total_touched > self.max_touched_entities:
-            world.entities_touched_this_tick.update(self.touched_entities)
-            raise QuotaExceededError(
-                f"Rule '{self.rule_id}' exceeded max_entities_touched_per_tick: {self.max_touched_entities} across tick {world.clock.current_tick} (attempted {total_touched})"
-            )
+        """Record an entity touched by read or write, enforcing tick-wide aggregate limit with O(1) incremental accounting."""
+        if entity_id not in self.touched_entities:
+            self.touched_entities.add(entity_id)
+            if entity_id not in world.entities_touched_this_tick:
+                self.new_world_touches += 1
+                total_touched = len(world.entities_touched_this_tick) + self.new_world_touches
+                if total_touched > self.max_touched_entities:
+                    world.entities_touched_this_tick.update(self.touched_entities)
+                    raise QuotaExceededError(
+                        f"Rule '{self.rule_id}' exceeded max_entities_touched_per_tick: {self.max_touched_entities} across tick {world.clock.current_tick} (attempted {total_touched})"
+                    )
 
 
 class GRLInterpreter:

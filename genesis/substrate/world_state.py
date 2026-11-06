@@ -37,6 +37,7 @@ class WorldState:
         self.config: RuntimeConfig = config or DEFAULT_CONFIG
         self.clock: SimulationClock = SimulationClock(0)
         self.rng: GenesisRNG = GenesisRNG(seed)
+        self._next_sequence_id: int = 1
         self.schema_registry: SchemaRegistry = SchemaRegistry()
         self.entities: EntityStorage = EntityStorage()
         self.relationships: RelationshipGraph = RelationshipGraph()
@@ -44,6 +45,13 @@ class WorldState:
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
         self.rule_engine_callback: Optional[Callable[[WorldState], None]] = None
+
+    def next_sequence_id(self) -> int:
+        """Return next strictly monotonic sequence ID for events."""
+        from genesis.core.arithmetic import check_int64
+        seq = self._next_sequence_id
+        self._next_sequence_id = check_int64(self._next_sequence_id + 1)
+        return seq
 
     def advance_tick(self) -> int:
         """Execute one complete discrete simulation tick through all 5 phases."""
@@ -54,7 +62,7 @@ class WorldState:
             tick=current_tick,
             phase=PHASE_PRE_TICK,
             priority=100,
-            sequence_id=self.event_queue._next_sequence_id,
+            sequence_id=self.next_sequence_id(),
             event_type="tick_started",
             payload={"tick": str(current_tick)},
         )
@@ -76,7 +84,7 @@ class WorldState:
             tick=current_tick,
             phase=PHASE_RESOURCE_SETTLEMENT,
             priority=0,
-            sequence_id=self.event_queue._next_sequence_id,
+            sequence_id=self.next_sequence_id(),
             event_type="resource_settlement_audited",
             payload={"tick": str(current_tick)},
         )
@@ -87,7 +95,7 @@ class WorldState:
             tick=current_tick,
             phase=PHASE_POST_TICK,
             priority=-100,
-            sequence_id=self.event_queue._next_sequence_id,
+            sequence_id=self.next_sequence_id(),
             event_type="tick_completed",
             payload={"tick": str(current_tick)},
         )
@@ -100,6 +108,7 @@ class WorldState:
         return {
             "schema_version": self.config.schema_version,
             "runtime_version": self.config.runtime_version,
+            "next_sequence_id": str(self._next_sequence_id),
             "clock": self.clock.to_dict(),
             "rng": self.rng.get_state(),
             "schemas": self.schema_registry.to_dict(),
@@ -114,6 +123,7 @@ class WorldState:
     def from_canonical_dict(cls, data: Dict[str, Any], config: Optional[RuntimeConfig] = None) -> WorldState:
         """Reconstruct full world state from canonical dictionary."""
         ws = cls(seed=0, config=config)
+        ws._next_sequence_id = int(data.get("next_sequence_id", "1"))
         ws.clock = SimulationClock.from_dict(data["clock"])
         ws.rng.set_state(data["rng"])
         ws.schema_registry = SchemaRegistry.from_dict(data.get("schemas", {}))

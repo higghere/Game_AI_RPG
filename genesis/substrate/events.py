@@ -140,9 +140,13 @@ class EventQueue:
         priority: int,
         event_type: str,
         payload: Optional[Dict[str, Any]] = None,
+        sequence_id: Optional[int] = None,
     ) -> EventRecord:
-        seq_id = self._next_sequence_id
-        self._next_sequence_id = check_int64(self._next_sequence_id + 1)
+        if sequence_id is not None:
+            seq_id = check_int64(sequence_id)
+        else:
+            seq_id = self._next_sequence_id
+            self._next_sequence_id = check_int64(self._next_sequence_id + 1)
         event = EventRecord(
             tick=tick,
             phase=phase,

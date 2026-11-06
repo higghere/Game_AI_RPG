@@ -32,7 +32,7 @@ from genesis.grl.ast import (
     UnaryOpNode,
 )
 from genesis.substrate.entities import Entity
-from genesis.substrate.events import EventRecord, PHASE_PERCEPTION_EVENTS
+from genesis.substrate.events import EventRecord, PHASE_GRL_RULES, PHASE_PERCEPTION_EVENTS
 from genesis.substrate.relationships import RelationshipEdge
 from genesis.substrate.world_state import WorldState
 
@@ -144,9 +144,9 @@ class GRLInterpreter:
             # Record success event in journal
             success_event = EventRecord(
                 tick=world.clock.current_tick,
-                phase=world.clock.current_tick,  # GRL rule phase
+                phase=PHASE_GRL_RULES,
                 priority=rule.priority,
-                sequence_id=world.event_queue._next_sequence_id,
+                sequence_id=world.next_sequence_id(),
                 event_type="rule_executed_success",
                 payload={
                     "rule_id": rule.rule_id,
@@ -161,9 +161,9 @@ class GRLInterpreter:
             # Single-rule rollback: discard staging buffers entirely
             failure_event = EventRecord(
                 tick=world.clock.current_tick,
-                phase=world.clock.current_tick,
+                phase=PHASE_GRL_RULES,
                 priority=rule.priority,
-                sequence_id=world.event_queue._next_sequence_id,
+                sequence_id=world.next_sequence_id(),
                 event_type="rule_execution_failed",
                 payload={
                     "rule_id": rule.rule_id,
@@ -360,7 +360,7 @@ class GRLInterpreter:
                 tick=target_tick,
                 phase=PHASE_PERCEPTION_EVENTS,
                 priority=0,
-                sequence_id=world.event_queue._next_sequence_id,
+                sequence_id=world.next_sequence_id(),
                 event_type=node.event_type,
                 payload=payload,
             )

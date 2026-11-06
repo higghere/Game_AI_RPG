@@ -40,14 +40,17 @@ All organisms, environmental resources, trophic interactions, life cycles, and m
 
 ### 2.1 Environmental Resource Reservoirs
 
-All resources use 64-bit signed integer `FixedPoint` quantities (scale $10^6$, 6 decimal places).
+All resources use 64-bit signed integer `FixedPoint` quantities (scale $10^6$, 6 decimal places). Every single resource reservoir is tracked within the closed-system conservation audit.
 
-| Pool Name | Min Capacity | Max Capacity | Replenishment Mode | Conservation Invariant |
-| :--- | :--- | :--- | :--- | :--- |
-| `solar_flux` | `0.0` | `1,000,000.0` | Influx per tick | External energetic driver |
-| `soil_water` | `0.0` | `50,000,000.0` | Closed / Recycled | Mass conserved: organism uptake + detritus release |
-| `soil_minerals` | `0.0` | `50,000,000.0` | Closed / Recycled | Mass conserved: mineralization from detritus |
-| `detritus` | `0.0` | `50,000,000.0` | Organic decay sink | Biomass conserved from expired organisms |
+| Pool Name | Min Capacity | Max Capacity | Initial Balance | Replenishment Mode | Closed-Loop Conservation Role |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `solar_flux` | `0.0` | `1,000,000.0` | `100,000.0` | Influx per tick | External energetic driver (energy open; excluded from mass audit) |
+| `soil_water` | `0.0` | `50,000,000.0` | `20,000,000.0` | Closed / Recycled | Mass conserved: uptake in photosynthesis; returned in decomposition |
+| `soil_minerals` | `0.0` | `50,000,000.0` | `20,000,000.0` | Closed / Recycled | Mass conserved: uptake in photosynthesis; remineralized in decomposition |
+| `detritus` | `0.0` | `50,000,000.0` | `10,000,000.0` | Closed / Recycled | Biomass conserved: sloughed tissue, grazing waste, and mortality sink |
+
+Total initial closed mass across the entire world:
+$$M_{\text{closed}} = \sum_{e \in \text{Entities}} (\text{biomass}_e) + \text{detritus} + \text{soil\_minerals} + \text{soil\_water} \equiv \text{Constant}$$
 
 ### 2.2 Organism Entity Schemas
 
@@ -151,55 +154,91 @@ Trophic Flow Diagram:
 | `BR_07_DECOMPOSITION` | 30 | Spatial Cell | Decomposers break down detritus into soil minerals. |
 | `BR_08_FORAGING_MIGRATION` | 20 | Spatial Cell | Herbivores in depleted cells migrate to adjacent cells. |
 
-### 3.2 Canonical GRL Rule Definitions
+### 3.2 Canonical GRL Rule Definitions & Exact Conversion Ratios
+
+All conversion ratios in GENESIS Alpha are defined as exact rational / fixed-point integer values. Floating-point approximations are forbidden. Every transformation satisfies exact mass balance:
+$$\sum \Delta \text{Mass}_{\text{inputs}} \equiv \sum \Delta \text{Mass}_{\text{outputs}}$$
 
 #### Rule `BR_01_SOLAR_REPLENISH` (Priority 100, Global)
 * **Precondition:** None.
 * **Effects:**
-  * `PRODUCE_RESOURCE(pool="solar_flux", amount=100000.0)`
+  * `PRODUCE_RESOURCE(pool="solar_flux", amount=100000.000000)` (Energy driver)
 
 #### Rule `BR_02_PHOTOSYNTHESIS` (Priority 80, Spatial-Partitioned)
 * **Target Selector:** `entity_type="autotroph"`, filter: `is_alive == 1`.
 * **Preconditions:**
-  * `solar_flux >= 10.0`
-  * `soil_water >= 5.0`
+  * `solar_flux >= 10.000000`
+  * `soil_water >= 4.000000`
+  * `soil_minerals >= 1.000000`
 * **Effects:**
-  * `CONSUME_RESOURCE(pool="solar_flux", amount=10.0)`
-  * `CONSUME_RESOURCE(pool="soil_water", amount=5.0)`
-  * `ADJUST_PROPERTY(entity="target", property="energy", delta=+8.0)`
-  * `ADJUST_PROPERTY(entity="target", property="biomass", delta=+2.0)`
+  * `CONSUME_RESOURCE(pool="solar_flux", amount=10.000000)` (Energy in)
+  * `CONSUME_RESOURCE(pool="soil_water", amount=4.000000)` (Mass in: 4.000000)
+  * `CONSUME_RESOURCE(pool="soil_minerals", amount=1.000000)` (Mass in: 1.000000)
+  * `ADJUST_PROPERTY(entity="target", property="energy", delta=+8.000000)` (Energy gained; 2.0 dissipated heat)
+  * `ADJUST_PROPERTY(entity="target", property="biomass", delta=+5.000000)` (Mass out: 4.000000 water + 1.000000 mineral = 5.000000 biomass)
+* **Exact Mass Balance:** $\Delta \text{soil\_water} (-4.0) + \Delta \text{soil\_minerals} (-1.0) + \Delta \text{biomass} (+5.0) \equiv 0.000000$.
 
 #### Rule `BR_03_BASAL_METABOLISM` (Priority 70, Spatial-Partitioned)
 * **Target Selector:** `entity_type in ["autotroph", "herbivore", "decomposer"]`, filter: `is_alive == 1`.
 * **Effects:**
-  * `ADJUST_PROPERTY(entity="target", property="energy", delta=-2.0)`
+  * `ADJUST_PROPERTY(entity="target", property="energy", delta=-2.000000)` (Basal respiration cost)
   * `ADJUST_PROPERTY(entity="target", property="age", delta=+1)`
+  * `ADJUST_PROPERTY(entity="target", property="biomass", delta=-0.100000)` (Tissue sloughing / cellular maintenance)
+  * `PRODUCE_RESOURCE(pool="detritus", amount=0.100000)` (Organic waste returned to soil sink)
+* **Exact Mass Balance:** $\Delta \text{biomass} (-0.100000) + \Delta \text{detritus} (+0.100000) \equiv 0.000000$.
 
 #### Rule `BR_04_HERBIVORE_GRAZING` (Priority 60, Spatial-Partitioned)
-* **Target Selector:** `entity_type="herbivore"`, filter: `is_alive == 1 and energy < 500.0`.
+* **Target Selector:** `entity_type="herbivore"`, filter: `is_alive == 1 and energy < 500.000000`.
 * **Effects:**
-  * Selects local autotroph in same cell, deducts $10.0$ biomass from autotroph, adds $+8.0$ energy and $+2.0$ biomass to herbivore.
+  * Selects local autotroph in same cell with `biomass >= 10.000000`.
+  * `ADJUST_PROPERTY(entity="autotroph", property="biomass", delta=-10.000000)` (Intake: 10.000000 mass)
+  * `ADJUST_PROPERTY(entity="target", property="biomass", delta=+7.000000)` (Assimilation efficiency 70%: 7.000000 mass)
+  * `PRODUCE_RESOURCE(pool="detritus", amount=3.000000)` (Unassimilated excretion: 30% = 3.000000 mass)
+  * `ADJUST_PROPERTY(entity="target", property="energy", delta=+8.000000)` (Digestive net energy yield)
+* **Exact Mass Balance:** $\Delta \text{autotroph\_biomass} (-10.0) + \Delta \text{herbivore\_biomass} (+7.0) + \Delta \text{detritus} (+3.0) \equiv 0.000000$.
 
 #### Rule `BR_05_STARVATION_DEATH` (Priority 50, Spatial-Partitioned)
-* **Target Selector:** `entity_type in ["autotroph", "herbivore", "decomposer"]`, filter: `is_alive == 1 and energy <= 0.0`.
+* **Target Selector:** `entity_type in ["autotroph", "herbivore", "decomposer"]`, filter: `is_alive == 1 and energy <= 0.000000`.
 * **Effects:**
-  * `SET_PROPERTY(entity="target", property="is_alive", value=0)`
-  * `PRODUCE_RESOURCE(pool="detritus", amount=target.biomass)`
-  * `SCHEDULE_EVENT(event_type="death", delay_ticks=0, payload={"entity_id": target.id})`
+  * `PRODUCE_RESOURCE(pool="detritus", amount=target.biomass)` (100% of body mass returned to detritus pool)
+  * `DESTROY_ENTITY(entity="target")` (Deallocates entity; cascades removal from spatial index and relationship graph)
+* **Exact Mass Balance:** $\Delta \text{biomass}_{\text{living}} (-M) + \Delta \text{detritus} (+M) \equiv 0.000000$.
 
 #### Rule `BR_06_REPRODUCTION` (Priority 40, Spatial-Partitioned)
-* **Target Selector:** `filter: is_alive == 1 and energy >= 200.0 and biomass >= 100.0`.
-* **Effects:**
-  * Deducts $50\%$ energy and biomass from parent.
-  * Schedules perception event `birth` with new entity attributes.
+* **Target Selector:** `filter: is_alive == 1 and energy >= 200.000000 and biomass >= 100.000000`.
+* **Exact Mass-Preserving Fission:**
+  * Let parent biomass be $B_{\text{parent}}$.
+  * Offspring biomass: $B_{\text{child}} = \lfloor B_{\text{parent}} / 2 \rfloor$ (computed via `half_even_div`).
+  * Parent retained biomass: $B_{\text{parent\_new}} = B_{\text{parent}} - B_{\text{child}}$.
+  * Since $B_{\text{parent\_new}} + B_{\text{child}} \equiv B_{\text{parent}}$, the split is strictly conservative down to $10^{-6}$ integer precision.
+  * Same exact split governs energy: $E_{\text{child}} = \lfloor E_{\text{parent}} / 2 \rfloor$, $E_{\text{parent\_new}} = E_{\text{parent}} - E_{\text{child}}$.
+  * `CREATE_ENTITY(entity_type=parent.type, result_var="offspring", initial_properties={..., biomass: B_child, energy: E_child})`
+* **Exact Mass Balance:** $\Delta \text{biomass}_{\text{parent}} (-B_{\text{child}}) + \Delta \text{biomass}_{\text{child}} (+B_{\text{child}}) \equiv 0.000000$.
 
 #### Rule `BR_07_DECOMPOSITION` (Priority 30, Spatial-Partitioned)
 * **Target Selector:** `entity_type="decomposer"`, filter: `is_alive == 1`.
-* **Preconditions:** `detritus >= 5.0`.
+* **Preconditions:** `detritus >= 5.000000`.
+* **Closing the Water and Mineral Cycles:**
+  * Decomposer breaks down 5.000000 units of organic detritus.
+  * 20% assimilated into microbial biomass: $+1.000000$ `biomass`.
+  * 64% remineralized into mineral salts: $+3.200000$ `soil_minerals`.
+  * 16% returned to water reservoir: $+0.800000$ `soil_water`.
 * **Effects:**
-  * `CONSUME_RESOURCE(pool="detritus", amount=5.0)`
-  * `PRODUCE_RESOURCE(pool="soil_minerals", amount=4.0)`
-  * `ADJUST_PROPERTY(entity="target", property="energy", delta=+1.0)`
+  * `CONSUME_RESOURCE(pool="detritus", amount=5.000000)`
+  * `ADJUST_PROPERTY(entity="target", property="biomass", delta=+1.000000)`
+  * `ADJUST_PROPERTY(entity="target", property="energy", delta=+1.000000)`
+  * `PRODUCE_RESOURCE(pool="soil_minerals", amount=3.200000)`
+  * `PRODUCE_RESOURCE(pool="soil_water", amount=0.800000)`
+* **Exact Mass Balance:** $\Delta \text{detritus} (-5.0) + \Delta \text{biomass} (+1.0) + \Delta \text{soil\_minerals} (+3.2) + \Delta \text{soil\_water} (+0.8) \equiv 0.000000$.
+
+#### Rule `BR_08_FORAGING_MIGRATION` (Priority 20, Spatial-Partitioned)
+* **Target Selector:** `entity_type="herbivore"`, filter: `is_alive == 1`.
+* **Preconditions:** Local cell autotroph biomass $< 5.000000$.
+* **Effects:**
+  * `ADJUST_PROPERTY(entity="target", property="energy", delta=-1.000000)` (Locomotion energetic cost)
+  * `SET_PROPERTY(entity="target", property="cell_x", value=target.cell_x + dx)`
+  * `SET_PROPERTY(entity="target", property="cell_y", value=target.cell_y + dy)`
+* **Exact Mass Balance:** Mass is completely conserved during spatial migration ($\Delta \text{biomass} = 0.0$).
 
 ---
 
@@ -208,16 +247,23 @@ Trophic Flow Diagram:
 Phase 2 enforces three categories of formal invariants:
 
 ### 4.1 Conservation Checks
-1. **Mass Conservation:**
-   $$\text{Biomass}_{\text{living}} + \text{Detritus} + \text{Soil Minerals} == \text{Total Initial Mass} \pm \Delta \text{Boundary Flux}$$
-   An automated invariant audit runs at Phase 3 (`RESOURCE_SETTLEMENT`). If mass disappears without a corresponding journaled flux, an `InvariantViolationError` is raised.
+1. **Total Closed-System Mass Conservation:**
+   $$\sum_{e \in \text{Entities}} (\text{biomass}_e) + \text{detritus} + \text{soil\_minerals} + \text{soil\_water} \equiv M_{\text{initial}}$$
+   An automated invariant audit runs at Phase 3 (`RESOURCE_SETTLEMENT`) on every single tick. If total system mass deviates by even $\pm 0.000001$ from the initial mass, an `InvariantViolationError` is immediately raised and execution halts.
 2. **Energy Non-Negativity:**
    No entity or resource pool may drop below `0.0`. Zero-energy states trigger mortality (`BR_05`) rather than negative arithmetic.
 
-### 4.2 Spatial Locality Invariants
+### 4.2 Spatial Locality & Scheduling Invariants
 1. **Zero-Range Interactions:** Organisms can only feed upon, interact with, or graze entities residing within the exact same spatial grid cell $(c_x, c_y)$.
 2. **Adjacent-Cell Dispersal:** Offspring dispersal and migration are restricted to Chebyshev distance $\le 1$ (immediate Moore neighborhood, 8 adjacent cells).
 3. **Simultaneous Movement Preservation:** Position changes are committed strictly at the end of the rule pass, guaranteeing no moving organism acts twice or is skipped.
+4. **Newborn Entity Scheduling Lifecycle:**
+   Entities created during a tick via `CREATE_ENTITY` are stamped with `born_tick = current_tick`.
+   **Newborn entities do NOT act in the tick they are born.** They become eligible for candidate selection strictly starting at tick $t + 1$. This eliminates intra-tick priority race conditions and ensures all entities active in a tick exist simultaneously at tick start.
+5. **Monotonic PRNG Stream Across Rollbacks:**
+   **Rolled-back rules keep their RNG draws.** If a rule draws random numbers and subsequently aborts or rolls back (e.g. Due to precondition failure, quota exceeded, or constraint violation), the PRNG state does NOT rewind. The PRNG advances monotonically, ensuring entropy forward progress, preventing search/replay loops, and maintaining linear execution order.
+6. **Zero Quota Failure Invariant in Ecosystem Tests:**
+   In all Phase 2 ecosystem tests (`TEST-201` through `TEST-207`), rule rollback is strictly a failure-prevention harness, NOT an expected operational mechanism. Every test requires **ZERO quota failures** (`world.event_journal` must have 0 events of type `rule_execution_failed` with `QuotaExceededError`). Any quota breach indicates improper spatial batching or rule design failure and will fail the acceptance test.
 
 ---
 
@@ -706,18 +752,20 @@ All schemas and ontology definitions are externalized into JSON data declaration
 
 ---
 
-#### Case (d): Group Tax to a Leader
+#### Case (d): Group Tax to a Leader (Push / Incremental Pattern)
 
-* **Scenario Description:** Hierarchical extraction and treasury accumulation. The leader of a group collects a 10% tax on wealth from all subordinate group members connected via incoming `subject_of` relationship edges. Wealth is deducted from each subject, and the aggregate sum is added to the leader's `treasury`.
+* **Design Pattern Comparison (Pull vs. Push):**
+  * *Pull Pattern (Deprecated):* A leader loops over all incoming `subject_of` edges. For a 20-member faction, this burned 204 operations (80% of budget) in a single cell/leader invocation. If the faction exceeded 25 members, the leader exceeded the 256-op quota and rolled back.
+  * *Push Pattern (Adopted):* Decentralized, subject-initiated tax remittance. Each subordinate agent executes during its own per-cell pass, computes its own 10% tax, deducts from its own balance, and pushes the funds directly into its leader's treasury. This scales to arbitrarily large factions (thousands of subjects) with zero risk of quota exhaustion.
 
 ```json
 {
-  "rule_id": "BR_GROUP_TAX_TO_LEADER",
-  "name": "Hierarchical Group Taxation and Treasury Accumulation",
+  "rule_id": "BR_SUBJECT_TAX_PUSH",
+  "name": "Decentralized Push-Pattern Group Taxation to Leader",
   "version": "1.0.0",
   "priority": 45,
   "active_from_tick": "0",
-  "spatial_partitioned": false,
+  "spatial_partitioned": true,
   "target_selector": {
     "entity_type": "agent",
     "limit": 5,
@@ -725,77 +773,86 @@ All schemas and ontology definitions are externalized into JSON data declaration
       "op": "AND",
       "left": {
         "op": "EQUALS",
-        "left": { "op": "GET_PROPERTY", "entity": "target", "property": "role" },
-        "right": { "op": "LITERAL", "type": "STRING", "value": "leader" }
-      },
-      "right": {
-        "op": "EQUALS",
         "left": { "op": "GET_PROPERTY", "entity": "target", "property": "is_alive" },
         "right": { "op": "LITERAL", "type": "INT64", "value": "1" }
+      },
+      "right": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": { "op": "GET_PROPERTY", "entity": "target", "property": "role" },
+          "right": { "op": "LITERAL", "type": "STRING", "value": "subject" }
+        },
+        "right": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": { "op": "GET_PROPERTY", "entity": "target", "property": "wealth" },
+          "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
+        }
       }
     }
   },
   "preconditions": [],
   "effects": [
     {
-      "op": "FOR_EACH",
-      "iterator_var": "member",
-      "collection_source": "incoming_relationships",
+      "op": "FIND_ENTITY",
+      "result_var": "leader",
+      "collection_source": "outgoing_relationships",
       "rel_type": "subject_of",
-      "max_iterations": 20,
-      "body": [
+      "limit": 1
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": { "op": "GET_PROPERTY", "entity": "leader", "property": "id" },
+        "right": { "op": "LITERAL", "type": "INT64", "value": "0" }
+      },
+      "then": [
         {
-          "op": "IF",
-          "condition": {
-            "op": "GREATER_THAN",
-            "left": { "op": "GET_PROPERTY", "entity": "member", "property": "wealth" },
-            "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
-          },
-          "then": [
-            {
-              "op": "ADJUST_PROPERTY",
-              "entity": "member",
-              "property": "wealth",
-              "delta": {
-                "op": "NEG",
-                "operand": {
-                  "op": "DIVIDE",
-                  "left": { "op": "GET_PROPERTY", "entity": "member", "property": "wealth" },
-                  "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
-                }
-              }
-            },
-            {
-              "op": "ADJUST_PROPERTY",
-              "entity": "target",
-              "property": "treasury",
-              "delta": {
-                "op": "DIVIDE",
-                "left": { "op": "GET_PROPERTY", "entity": "member", "property": "wealth" },
-                "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
-              }
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "wealth",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "DIVIDE",
+              "left": { "op": "GET_PROPERTY", "entity": "target", "property": "wealth" },
+              "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
             }
-          ],
-          "else": []
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "leader",
+          "property": "treasury",
+          "delta": {
+            "op": "DIVIDE",
+            "left": { "op": "GET_PROPERTY", "entity": "target", "property": "wealth" },
+            "right": { "op": "LITERAL", "type": "INT64", "value": "10" }
+          }
         }
-      ]
+      ],
+      "else": []
     }
   ]
 }
 ```
 
 * **Missing Primitives in Phase 1:**
-  1. `incoming_relationships` Traversal: Current `ForEachNode` in Phase 1 only iterates `outgoing` edges (`world.relationships.get_outgoing()`). Incoming edges are completely inaccessible.
-  2. Bounded Iteration Guard: No explicit `max_iterations` ceiling on `FOR_EACH`, risking 256-operation overflow if a faction grows large.
-* **Proposed Additions Used:** `incoming_relationships` collection source with strict `max_iterations: 20` ceiling, and cross-entity property adjustments.
+  1. `FIND_ENTITY` on Relationship Sets: Finding the specific leader entity referenced by outgoing `subject_of` edge to bind to `leader`.
+  2. Cross-Entity Property Mutation: Adjusting `target.wealth` and `leader.treasury` within the same atomic transaction.
+* **Proposed Additions Used:** `FIND_ENTITY` on `outgoing_relationships` and multi-entity property adjustments.
 * **Budget & Touch Accounting (256-Op & 1,000-Touch Limits):**
-  * *Target Selection:* 1 leader selected: $4$ ops, $1$ touch.
-  * *`FOR_EACH` Iteration over 20 Members:*
-    * Per-member overhead: 1 edge fetch ($1$ op), 1 condition evaluation ($3$ ops), 2 property adjustments with division ($2 \times 3 = 6$ ops). Subtotal per member = $10$ ops.
-    * For 20 members: $20 \times 10 = 200$ ops.
-    * Touches per member: $1$ touch. For 20 members: $20$ touches.
-  * *Total per Leader Invocation:* $4 + 200 = 204$ operations ($\le 256$ cap). Headroom = $52$ ops ($20\%$).
-  * *Total Entity Touches:* $1$ leader $+ 20$ members $= 21$ touches. For 5 factions across the world: $105$ touches ($\le 1,000$ tick-wide cap).
+  * *Target Selection:* 5 subjects selected in cell: $5 \times 6 = 30$ ops, $5$ touches.
+  * *Per-Subject Push Execution:*
+    * `FIND_ENTITY` leader lookup: 1 edge lookup ($2$ ops), touches leader ($1$ touch).
+    * `IF` condition check: $2$ ops.
+    * 2 Property adjustments (subject wealth deduction + leader treasury credit): $2 \times 3 = 6$ ops.
+    * Subtotal per subject: $10$ ops.
+    * For 5 subjects: $50$ ops.
+  * *Total per Cell Invocation:* $30 + 50 = 80$ operations ($\le 256$ cap). Headroom = $176$ ops ($69\%$).
+  * *Per-Individual Invocational Cost:* Single subject executing alone consumes only **12 operations** and touches **2 entities**!
+  * *Total Entity Touches:* 5 subjects $+ 1$ leader $= 6$ touches per cell. Across 30 cells (300 agents): $180$ touches ($\le 1,000$ tick-wide cap, **82% headroom**).
 
 ---
 
@@ -1032,8 +1089,8 @@ The following matrix verifies that all six canonical rules comfortably operate w
 | **(a)** | `BR_06_REPRODUCTION` | 10 scanned, 2 created | 98 ops | **62% (158 ops left)** | 12 entities | 360 touches | **64% (640 touches left)** | Single-rule rollback; no offspring spawned |
 | **(b)** | `BR_05_DEATH_RECYCLE` | 10 scanned, 5 destroyed | 95 ops | **63% (161 ops left)** | 10 entities | 300 touches | **70% (700 touches left)** | Single-rule rollback; body remains for next tick |
 | **(c)** | `BR_BILATERAL_TRADE` | 1 target, 8 partners | 56 ops | **78% (200 ops left)** | 9 entities | 270 touches | **73% (730 touches left)** | Single-rule rollback; balances untouched |
-| **(d)** | `BR_GROUP_TAXATION` | 1 leader, 20 subjects | 204 ops | **20% (52 ops left)** | 21 entities | 105 touches (5 groups) | **90% (895 touches left)** | Single-rule rollback; no tax deducted |
-| **(e)** | `BR_LEADER_SUCCESSION`| 1 leader, 16 subjects | 90 ops | **65% (166 ops left)** | 18 entities | 36 touches (2 successions) | **96% (964 touches left)** | Single-rule rollback; old leader uncollected |
+| **(d)** | `BR_SUBJECT_TAX_PUSH` | 5 subjects per cell | 80 ops (12 ops / agent) | **69% (176 ops left)** | 6 entities (2 / agent) | 180 touches | **82% (820 touches left)** | Single-rule rollback; no tax pushed |
+| **(e)** | `BR_LEADER_SUCCESSION`| 1 leader, 16 subjects | 90 ops | **65% (166 ops left)** | 17 entities | 34 touches (2 successions) | **96% (966 touches left)** | Single-rule rollback; old leader uncollected |
 | **(f)** | `BR_PRACTICE_TRANSMIT`| 2 learners, 6 mentors | 72 ops | **72% (184 ops left)** | 8 entities | 240 touches | **76% (760 touches left)** | Single-rule rollback; proficiency unmutated |
 
 ---

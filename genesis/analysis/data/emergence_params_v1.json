@@ -1,0 +1,46 @@
+{
+  "cultural_spread": {
+    "max_ancestor_generation_depth": 2,
+    "min_adopter_absolute": 8,
+    "min_adopter_fraction": "0.100000",
+    "min_distinct_lineages": 3,
+    "min_fidelity_fraction": "0.900000",
+    "min_non_kin_transmission_fraction": "0.500000",
+    "min_post_founder_adopters": 5,
+    "min_spatial_span_cells": 2,
+    "min_speed_ratio_vs_lineage": "2.000000"
+  },
+  "group": {
+    "community_detection_max_iterations": 20,
+    "max_kin_generation_depth": 2,
+    "min_cohesion_ratio": "2.000000",
+    "min_internal_density": "0.200000",
+    "min_jaccard_similarity": "0.500000",
+    "min_members": 5,
+    "min_non_kin_edge_fraction": "0.300000",
+    "min_turnover_fraction": "0.500000",
+    "persistence_ticks": 3650,
+    "persistence_years": 10,
+    "sample_interval_ticks": 365
+  },
+  "null_models": {
+    "alpha_significance": "0.010000",
+    "analysis_stream_domain_tag": "genesis/analysis-stream/v1",
+    "default_analysis_seed": 1337,
+    "k_permutations": 200,
+    "significance_percentile": 99
+  },
+  "settlement": {
+    "max_centroid_drift_cells": 2,
+    "min_agents": 8,
+    "min_born_in_fraction": "0.300000",
+    "min_jaccard_similarity": "0.500000",
+    "persistence_ticks": 1825,
+    "persistence_years": 5,
+    "radius_cells": 2,
+    "sample_interval_ticks": 365,
+    "stockpile_enrichment_ratio_min": "1.500000"
+  },
+  "ticks_per_year": 365,
+  "version": "v1"
+}

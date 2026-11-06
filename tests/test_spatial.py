@@ -331,6 +331,96 @@ class TestSpatialGridSubstrate(unittest.TestCase):
         self.assertEqual(world.spatial_index.get_entity_cell(a2.id), (1, 1))
         self.assertEqual(world.spatial_index.get_entity_cell(a3.id), (1, 1))
 
+    def test_cell_order_shuffling_gives_equal_priority_in_shared_competition(self):
+        """Two cells competing for a shared finite resource pool must win about equally often over many ticks."""
+        config = RuntimeConfig(max_operations_per_rule=256, max_entities_touched_per_tick=1000)
+        world = WorldState(seed=20261106, config=config)
+
+        world.resources.create_pool("forage", initial_balance=FixedPoint.from_int(0))
+
+        schema = EntityTypeSchema("competitor")
+        schema.add_property(PropertyDefinition("cell_x", PropertyType.INT64, default_value=0))
+        schema.add_property(PropertyDefinition("cell_y", PropertyType.INT64, default_value=0))
+        schema.add_property(PropertyDefinition("wins", PropertyType.INT64, default_value=0))
+        world.schema_registry.register_type(schema)
+
+        # Competitor 1 in cell (0, 0)
+        c1 = world.entities.create_entity("competitor", 0, {"cell_x": 0, "cell_y": 0, "wins": 0}, world.schema_registry)
+        world.place_entity_in_cell(c1.id, 0, 0)
+
+        # Competitor 2 in cell (5, 5)
+        c2 = world.entities.create_entity("competitor", 0, {"cell_x": 5, "cell_y": 5, "wins": 0}, world.schema_registry)
+        world.place_entity_in_cell(c2.id, 5, 5)
+
+        parser = GRLParser()
+
+        # Rule 1 (Priority 20): Global replenish of exactly 10 units each tick
+        replenish_rule = {
+            "rule_id": "r_replenish_forage",
+            "name": "Replenish Forage",
+            "version": "1.0.0",
+            "priority": 20,
+            "spatial_partitioned": False,
+            "effects": [
+                {
+                    "op": "PRODUCE_RESOURCE",
+                    "pool": "forage",
+                    "amount": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                }
+            ],
+        }
+        world.register_rule(parser.parse_rule(replenish_rule))
+
+        # Rule 2 (Priority 10): Spatial partitioned competition for forage
+        # First cell to execute consumes the 10 units; second cell finds pool empty and fails precondition
+        competition_rule = {
+            "rule_id": "r_claim_forage",
+            "name": "Claim Forage",
+            "version": "1.0.0",
+            "priority": 10,
+            "spatial_partitioned": True,
+            "target_selector": {
+                "entity_type": "competitor",
+            },
+            "preconditions": [
+                {
+                    "op": "GREATER_THAN_OR_EQUAL",
+                    "left": {"op": "GET_RESOURCE", "pool": "forage"},
+                    "right": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                }
+            ],
+            "effects": [
+                {
+                    "op": "CONSUME_RESOURCE",
+                    "pool": "forage",
+                    "amount": {"op": "LITERAL", "type": "FIXED_POINT", "value": "10000000"},
+                },
+                {
+                    "op": "ADJUST_PROPERTY",
+                    "entity": "target",
+                    "property": "wins",
+                    "delta": {"op": "LITERAL", "type": "INT64", "value": "1"},
+                },
+            ],
+        }
+        world.register_rule(parser.parse_rule(competition_rule))
+
+        # Run for 200 ticks
+        num_ticks = 200
+        for _ in range(num_ticks):
+            world.advance_tick()
+
+        w1 = c1.get_property("wins")
+        w2 = c2.get_property("wins")
+
+        # Total wins must equal 200 (one cell won each tick)
+        self.assertEqual(w1 + w2, num_ticks, f"Total wins must be {num_ticks}, got {w1} + {w2}")
+
+        # Both competitors must win roughly equally often (e.g. at least 35% each, avoiding systematic priority)
+        # Without shuffling, w1 would be 200 and w2 would be 0!
+        self.assertGreaterEqual(w1, 70, f"Cell (0, 0) should win roughly half the time, won {w1}/{num_ticks}")
+        self.assertGreaterEqual(w2, 70, f"Cell (5, 5) should win roughly half the time, won {w2}/{num_ticks}")
+
 
 if __name__ == "__main__":
     unittest.main()

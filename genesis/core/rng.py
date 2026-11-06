@@ -82,6 +82,14 @@ class GenesisRNG:
         idx = self.next_int_range(0, len(seq) - 1)
         return seq[idx]
 
+    def deterministic_shuffle(self, seq: Sequence[T]) -> List[T]:
+        """Produce a new list with items deterministically shuffled using Fisher-Yates with xoshiro256**."""
+        result = list(seq)
+        for i in range(len(result) - 1, 0, -1):
+            j = self.next_int_range(0, i)
+            result[i], result[j] = result[j], result[i]
+        return result
+
     @property
     def step_count(self) -> int:
         return self._step_count

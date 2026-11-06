@@ -94,7 +94,9 @@ class RuleRegistry:
         for rule in active_rules:
             if rule.spatial_partitioned:
                 occupied_cells = world.spatial_index.get_occupied_cells()
-                for cell in occupied_cells:
+                # Deterministically shuffle cell processing order per tick via world RNG so no region gets systematic priority
+                shuffled_cells = world.rng.deterministic_shuffle(occupied_cells)
+                for cell in shuffled_cells:
                     success, msg = self.interpreter.execute_rule(
                         rule, world, cell=cell, defer_spatial_sync=True
                     )

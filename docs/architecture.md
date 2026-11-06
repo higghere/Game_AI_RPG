@@ -47,6 +47,11 @@ Alpha does **not** simulate a medieval kingdom, a sprawling RPG world, or a comp
     - Matched/evaluated entities count toward the tick-wide aggregate cap (1,000 entities) tracked via $O(1)$ incremental accounting.
     - Spatial state is serialized canonically into snapshots and can be deterministically rebuilt from entity properties (`cell_x`/`cell_y` or `pos_x`/`pos_y`), guaranteeing bit-identical state hashes across snapshot save and reload.
     - Single-cell rollback: failure or quota breach in one cell rolls back only that cell's staged mutations, recording an event and allowing other cells to execute normally.
+    - **Cell Execution Order & Anti-Bias Shuffling:** To prevent geographic priority (e.g. cell (0, 0) always acting before cell (5, 5)), the per-tick cell processing order is deterministically shuffled using `world.rng.deterministic_shuffle()`. Over many ticks, competing cells win contention for shared resource pools with equal probability.
+    - **Visibility Rules for Same-Pass Property Changes:**
+      * *Position / Spatial Changes:* Staged during cell execution and committed to `world.spatial_index` only at the conclusion of the rule pass. All cell evaluations within a pass observe the spatial layout at the start of the pass. Moving agents neither act twice nor are skipped (simultaneous movement).
+      * *Intra-Pass Entity Property Changes:* Staged property mutations on an entity commit at the end of that cell's evaluation. Because cells partition disjoint sets of entities, two cell evaluations within the same pass never mutate the same entity. Subsequent rules in the same tick observe the committed properties in priority order.
+      * *Global Resource Contention:* Resource pool mutations are staged and checked for underflow/overflow within each cell, settling immediately upon transaction commit. Contention order for finite pools is determined by the per-tick shuffled cell sequence.
 
 ---
 

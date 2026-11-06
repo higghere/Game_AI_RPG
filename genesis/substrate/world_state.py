@@ -219,6 +219,11 @@ class WorldState:
             )
             self.event_journal.append(digest_event)
 
+        # Check for epoch boundary (every epoch_size ticks)
+        if current_tick > 0 and current_tick % self.event_journal.epoch_size == 0:
+            epoch_num = current_tick // self.event_journal.epoch_size
+            self.event_journal.commit_epoch_segment(epoch_num)
+
         return current_tick
 
     def to_canonical_dict(self) -> Dict[str, Any]:

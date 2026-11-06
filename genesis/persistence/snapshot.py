@@ -51,8 +51,10 @@ class SnapshotManager:
         return str(target_path), file_hash
 
     def load_snapshot(self, filepath: str, config: Optional[RuntimeConfig] = None) -> WorldState:
-        """Load world state from canonical snapshot file."""
+        """Load world state from canonical snapshot file and reconcile journal crash recovery."""
         with open(filepath, "rb") as f:
             data = json.loads(f.read().decode("utf-8"))
 
-        return WorldState.from_canonical_dict(data, config=config or DEFAULT_CONFIG)
+        ws = WorldState.from_canonical_dict(data, config=config or DEFAULT_CONFIG)
+        ws.event_journal.reconcile_crash_recovery(ws.clock.current_tick, ws.event_journal.last_hash)
+        return ws

@@ -57,5 +57,9 @@ class SecurityViolationError(GenesisError):
     """Raised when an escape attempt, unauthorized path, or tampering is detected."""
 
 
+class JournalTamperError(SecurityViolationError):
+    """Raised when an append-only event journal segment or hash chain has been tampered with."""
+
+
 class InternalRuntimeError(GenesisError):
     """Raised when an unexpected non-GENESIS exception occurs in the engine."""

@@ -65,10 +65,17 @@ class GRLParser:
             limit = int(sel_data.get("limit", 1000))
             if limit < 1 or limit > 1000:
                 raise GRLValidationError("target_selector limit must be between 1 and 1000")
+            spatial_cell = None
+            if "spatial_cell" in sel_data and sel_data["spatial_cell"] is not None:
+                sc = sel_data["spatial_cell"]
+                if not isinstance(sc, (list, tuple)) or len(sc) != 2:
+                    raise GRLValidationError("spatial_cell must be a 2-element array [cx, cy]")
+                spatial_cell = (int(sc[0]), int(sc[1]))
             selector = TargetSelector(
                 entity_type=sel_data["entity_type"],
                 filter_expr=filter_expr,
                 limit=limit,
+                spatial_cell=spatial_cell,
             )
 
         # Preconditions
@@ -90,6 +97,7 @@ class GRLParser:
             preconditions=preconditions,
             effects=effects,
             active_from_tick=int(data.get("active_from_tick", 0)),
+            spatial_partitioned=bool(data.get("spatial_partitioned", False)),
         )
 
     def parse_expression(self, node: Any) -> GRLNode:

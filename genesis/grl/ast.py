@@ -132,6 +132,7 @@ class TargetSelector:
     entity_type: str
     filter_expr: Optional[GRLNode] = None
     limit: int = 1000
+    spatial_cell: Optional[Tuple[int, int]] = None
 
 
 @dataclass
@@ -144,6 +145,7 @@ class RuleDefinition:
     preconditions: List[GRLNode] = field(default_factory=list)
     effects: List[GRLNode] = field(default_factory=list)
     active_from_tick: int = 0
+    spatial_partitioned: bool = False
 
 
 def ast_to_canonical_dict(node: Any) -> Any:
@@ -216,11 +218,15 @@ def rule_to_canonical_dict(rule: RuleDefinition) -> Dict[str, Any]:
         "preconditions": [ast_to_canonical_dict(p) for p in rule.preconditions],
         "effects": [ast_to_canonical_dict(e) for e in rule.effects],
     }
+    if rule.spatial_partitioned:
+        d["spatial_partitioned"] = True
     if rule.target_selector:
         sel: Dict[str, Any] = {
             "entity_type": rule.target_selector.entity_type,
             "limit": rule.target_selector.limit,
         }
+        if rule.target_selector.spatial_cell is not None:
+            sel["spatial_cell"] = [rule.target_selector.spatial_cell[0], rule.target_selector.spatial_cell[1]]
         if rule.target_selector.filter_expr:
             sel["filter"] = ast_to_canonical_dict(rule.target_selector.filter_expr)
         d["target_selector"] = sel

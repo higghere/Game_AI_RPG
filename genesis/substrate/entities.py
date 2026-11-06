@@ -33,6 +33,9 @@ class Entity:
     def get_property(self, name: str) -> Any:
         return self.properties.get(name)
 
+    def has_property(self, name: str) -> bool:
+        return name in self.properties
+
     def set_property(self, name: str, value: Any) -> None:
         self.properties[name] = value
 

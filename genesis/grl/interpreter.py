@@ -106,9 +106,22 @@ class GRLInterpreter:
     def __init__(self, config: RuntimeConfig = DEFAULT_CONFIG) -> None:
         self.config = config
 
-    def execute_rule(self, rule: RuleDefinition, world: WorldState) -> Tuple[bool, str]:
-        """Execute a rule against world state with single-rule rollback on error."""
-        ctx = ExecutionContext(rule.rule_id, self.config)
+    def execute_rule(
+        self,
+        rule: RuleDefinition,
+        world: WorldState,
+        cell: Optional[Tuple[int, int]] = None,
+    ) -> Tuple[bool, str]:
+        """Execute a rule against world state with single-rule rollback on error.
+
+        If cell is specified, the rule executes scoped to entities in that spatial cell,
+        with a fresh per-cell operation budget.
+        """
+        invocation_id = f"{rule.rule_id}@{cell[0]},{cell[1]}" if cell is not None else rule.rule_id
+        ctx = ExecutionContext(invocation_id, self.config)
+        if cell is not None:
+            ctx.variables["current_cell_x"] = cell[0]
+            ctx.variables["current_cell_y"] = cell[1]
 
         try:
             # 1. Global Preconditions Gate
@@ -123,8 +136,21 @@ class GRLInterpreter:
             candidate_entities: List[Optional[Entity]] = []
             if rule.target_selector:
                 sel = rule.target_selector
-                all_of_type = world.entities.get_entities_by_type(sel.entity_type)
-                for ent in all_of_type:
+                target_cell = cell if cell is not None else sel.spatial_cell
+
+                if target_cell is not None:
+                    # Spatial lookup through substrate: O(1) cell lookup!
+                    cell_entity_ids = world.spatial_index.get_entities_in_cell(target_cell[0], target_cell[1])
+                    entities_to_evaluate: List[Entity] = []
+                    for eid in cell_entity_ids:
+                        ent = world.entities.get_entity(eid)
+                        if ent and ent.is_active and ent.entity_type == sel.entity_type:
+                            entities_to_evaluate.append(ent)
+                else:
+                    # Global lookup across entire world
+                    entities_to_evaluate = world.entities.get_entities_by_type(sel.entity_type)
+
+                for ent in entities_to_evaluate:
                     # Reading an entity during selection counts as a touch
                     ctx.touch_entity(ent.id, world)
                     ctx.consume_op()
@@ -459,6 +485,11 @@ class GRLInterpreter:
             ent = world.entities.get_entity(ent_id)
             if ent:
                 ent.set_property(prop_name, val)
+                if prop_name in ("cell_x", "cell_y", "pos_x", "pos_y"):
+                    if ent.has_property("cell_x") and ent.has_property("cell_y"):
+                        world.spatial_index.place_entity(ent.id, ent.get_property("cell_x"), ent.get_property("cell_y"))
+                    elif ent.has_property("pos_x") and ent.has_property("pos_y"):
+                        world.spatial_index.place_entity(ent.id, ent.get_property("pos_x"), ent.get_property("pos_y"))
 
         # 2. Resources
         for pool_name, delta in ctx.staged_resources.items():

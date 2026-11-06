@@ -24,6 +24,7 @@ from genesis.substrate.events import (
 from genesis.substrate.properties import SchemaRegistry
 from genesis.substrate.relationships import RelationshipGraph
 from genesis.substrate.resources import ResourceRegistry
+from genesis.substrate.spatial import SpatialGridIndex
 
 
 class WorldState:
@@ -42,6 +43,7 @@ class WorldState:
         self.entities: EntityStorage = EntityStorage()
         self.relationships: RelationshipGraph = RelationshipGraph()
         self.resources: ResourceRegistry = ResourceRegistry()
+        self.spatial_index: SpatialGridIndex = SpatialGridIndex()
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
         self.entities_touched_this_tick: Set[int] = set()
@@ -61,6 +63,36 @@ class WorldState:
         seq = self._next_sequence_id
         self._next_sequence_id = check_int64(self._next_sequence_id + 1)
         return seq
+
+    def get_entities_in_cell(self, cx: int, cy: int) -> List[int]:
+        """Return all entity IDs in spatial cell (cx, cy) sorted ascending."""
+        return self.spatial_index.get_entities_in_cell(cx, cy)
+
+    def place_entity_in_cell(
+        self,
+        entity_id: int,
+        cx: Any,
+        cy: Any,
+    ) -> Tuple[int, int]:
+        """Place an entity in a spatial cell (cx, cy)."""
+        return self.spatial_index.place_entity(entity_id, cx, cy)
+
+    def move_entity_cell(
+        self,
+        entity_id: int,
+        new_cx: Any,
+        new_cy: Any,
+    ) -> Tuple[int, int]:
+        """Move entity to new spatial cell."""
+        return self.spatial_index.move_entity(entity_id, new_cx, new_cy)
+
+    def get_occupied_cells(self) -> List[Tuple[int, int]]:
+        """Return all occupied spatial cells sorted ascending by (cx, cy)."""
+        return self.spatial_index.get_occupied_cells()
+
+    def rebuild_spatial_index(self) -> None:
+        """Deterministically rebuild spatial index from entity properties."""
+        self.spatial_index.rebuild_from_entities(self.entities._entities)
 
     def advance_tick(self) -> int:
         """Execute one complete discrete simulation tick through all 5 phases."""
@@ -127,6 +159,7 @@ class WorldState:
             "entities": self.entities.to_dict(),
             "relationships": self.relationships.to_dict(),
             "resources": self.resources.to_dict(),
+            "spatial_index": self.spatial_index.to_dict(),
             "event_queue": self.event_queue.to_dict(),
             "event_journal": self.event_journal.to_dict(),
             "rules": self.rule_registry.to_canonical_dict() if self.rule_registry else {},
@@ -143,6 +176,8 @@ class WorldState:
         ws.entities = EntityStorage.from_dict(data["entities"])
         ws.relationships = RelationshipGraph.from_dict(data["relationships"])
         ws.resources = ResourceRegistry.from_dict(data["resources"])
+        if "spatial_index" in data:
+            ws.spatial_index = SpatialGridIndex.from_dict(data["spatial_index"])
         ws.event_queue = EventQueue.from_dict(data["event_queue"])
         if "event_journal" in data:
             ws.event_journal = EventJournal.from_dict(data["event_journal"])

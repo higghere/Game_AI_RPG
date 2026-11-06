@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
 from genesis.persistence.canonical import canonical_json_bytes
@@ -46,15 +46,37 @@ class SnapshotManager:
         # Atomic rename
         os.replace(temp_path, target_path)
 
+        # Write runtime sidecar metadata (not hashed, for local path recovery)
+        meta_target = self.base_dir / f"{filename}.meta.json"
+        meta_temp = self.base_dir / f"{filename}.meta.json.tmp"
+        with open(meta_temp, "w", encoding="utf-8") as f:
+            json.dump({"journal_dir": str(world.event_journal.journal_dir)}, f)
+        os.replace(meta_temp, meta_target)
+
         # Compute hash from persisted file
         file_hash = compute_file_hash(str(target_path))
         return str(target_path), file_hash
 
-    def load_snapshot(self, filepath: str, config: Optional[RuntimeConfig] = None) -> WorldState:
+    def load_snapshot(
+        self,
+        filepath: str,
+        config: Optional[RuntimeConfig] = None,
+        journal_dir: Optional[Union[str, Path]] = None,
+    ) -> WorldState:
         """Load world state from canonical snapshot file and reconcile journal crash recovery."""
         with open(filepath, "rb") as f:
             data = json.loads(f.read().decode("utf-8"))
 
-        ws = WorldState.from_canonical_dict(data, config=config or DEFAULT_CONFIG)
+        if journal_dir is None:
+            meta_path = Path(filepath).parent / f"{Path(filepath).name}.meta.json"
+            if meta_path.exists():
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta_data = json.load(f)
+                        journal_dir = meta_data.get("journal_dir")
+                except Exception:
+                    pass
+
+        ws = WorldState.from_canonical_dict(data, config=config or DEFAULT_CONFIG, journal_dir=journal_dir)
         ws.event_journal.reconcile_crash_recovery(ws.clock.current_tick, ws.event_journal.last_hash)
         return ws

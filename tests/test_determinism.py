@@ -13,7 +13,8 @@ from genesis.substrate.properties import EntityTypeSchema, PropertyDefinition, P
 from genesis.substrate.world_state import WorldState
 
 # Committed Golden Hashes for fixed seed 20261105 across 100 ticks with active RNG (SUMMARY audit level)
-EXPECTED_GOLDEN_STATE_HASH = "abac21228879cb3edf69c2fff3ea3879539db842b12211d55439b5caffaca779"
+# Cross-platform invariant: free of host directories, paths, slashes, or OS-specific formats
+EXPECTED_GOLDEN_STATE_HASH = "9b7329c82e2ec0aa60fc307fa4994581937c009fc729a5f3210078e6ad6d97f9"
 EXPECTED_GOLDEN_JOURNAL_HASH = "3207971d4222cc9c9831df60c4f44dcf46b8b88b398d8f2ffbf358e66fb8c92b"
 
 
@@ -117,6 +118,74 @@ class TestDeterminismSubstrate(unittest.TestCase):
 
         self.assertEqual(computed_state_hash, EXPECTED_GOLDEN_STATE_HASH, "State hash drifted from golden standard")
         self.assertEqual(computed_journal_hash, EXPECTED_GOLDEN_JOURNAL_HASH, "Journal hash drifted from golden standard")
+
+    def test_cross_platform_path_invariance_and_golden_hash(self):
+        """Prove that worlds with Windows vs Linux paths and segment file paths yield bit-identical state hashes.
+
+        Simulates running on Linux (/var/log/sim, /tmp/sim) vs Windows (C:\\sim, D:\\data).
+        Verifies that journal_dir and filepath are completely absent from canonical state.
+        """
+        import tempfile
+        from pathlib import Path
+
+        temp_dir = tempfile.mkdtemp()
+        linux_sim_dir = Path(temp_dir) / "linux_sim"
+        win_sim_dir = Path(temp_dir) / "win_sim"
+
+        w_linux = WorldState(seed=20261105, journal_dir=linux_sim_dir)
+        w_win = WorldState(seed=20261105, journal_dir=win_sim_dir)
+
+        for w in (w_linux, w_win):
+            w.resources.create_pool("energy", initial_balance=FixedPoint.from_int(10000))
+            schema = EntityTypeSchema("organism")
+            schema.add_property(PropertyDefinition("energy", PropertyType.FIXED_POINT, default_value=FixedPoint.from_int(100)))
+            schema.add_property(PropertyDefinition("generation", PropertyType.INT64, default_value=0))
+            w.schema_registry.register_type(schema)
+
+            for i in range(25):
+                w.entities.create_entity("organism", 0, {"energy": FixedPoint.from_int(100 + i)}, w.schema_registry)
+
+        # Run 10 ticks and commit epoch segment on both worlds
+        w_linux.event_journal.epoch_size = 5
+        w_win.event_journal.epoch_size = 5
+
+        for tick in range(10):
+            roll_linux = w_linux.rng.next_int_range(1, 50)
+            roll_win = w_win.rng.next_int_range(1, 50)
+            self.assertEqual(roll_linux, roll_win)
+
+            for w, roll in ((w_linux, roll_linux), (w_win, roll_win)):
+                w.resources.get_pool("energy").produce(FixedPoint.from_int(roll))
+                ent = w.entities.get_entity((tick % 25) + 1)
+                if ent:
+                    ent.set_property("energy", ent.get_property("energy") + FixedPoint.from_raw(roll * 10000))
+                w.advance_tick()
+
+        # Both worlds committed 2 epoch segments
+        self.assertEqual(len(w_linux.event_journal.committed_segments), 2)
+        self.assertEqual(len(w_win.event_journal.committed_segments), 2)
+
+        # Verify segments on disk
+        self.assertTrue(w_linux.event_journal.verify_integrity())
+        self.assertTrue(w_win.event_journal.verify_integrity())
+
+        # Canonical dictionaries and hashes must be 100% bit-identical
+        dict_linux = w_linux.to_canonical_dict()
+        dict_win = w_win.to_canonical_dict()
+
+        # Check absence of paths in canonical state
+        self.assertNotIn("journal_dir", dict_linux["event_journal"])
+        self.assertNotIn("journal_dir", dict_win["event_journal"])
+        for seg in dict_linux["event_journal"]["committed_segments"]:
+            self.assertNotIn("filepath", seg)
+        for seg in dict_win["event_journal"]["committed_segments"]:
+            self.assertNotIn("filepath", seg)
+
+        hash_linux = compute_canonical_hash(dict_linux)
+        hash_win = compute_canonical_hash(dict_win)
+
+        self.assertEqual(hash_linux, hash_win, "Linux and Windows path worlds produced divergent canonical state hashes!")
+        self.assertEqual(w_linux.event_journal.last_hash, w_win.event_journal.last_hash)
 
     def test_cross_process_pythonhashseed_determinism(self):
         """Run independent simulation subprocesses with different PYTHONHASHSEED values.

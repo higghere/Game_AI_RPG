@@ -5,7 +5,9 @@ entities, relationships, resources, and event ledger.
 """
 
 from __future__ import annotations
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+import uuid
 
 from genesis.core.clock import SimulationClock
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
@@ -38,8 +40,15 @@ class WorldState:
         self,
         seed: int = 42,
         config: Optional[RuntimeConfig] = None,
+        world_id: Optional[str] = None,
+        journal_dir: Optional[Union[str, Path]] = None,
     ) -> None:
         self.config: RuntimeConfig = config or DEFAULT_CONFIG
+        self.world_id: str = world_id or f"world_{uuid.uuid4().hex[:10]}"
+        if journal_dir is not None:
+            self.journal_dir: Path = Path(journal_dir)
+        else:
+            self.journal_dir: Path = Path("data/journal") / self.world_id
         self.clock: SimulationClock = SimulationClock(0)
         self.rng: GenesisRNG = GenesisRNG(seed)
         self._next_sequence_id: int = 1
@@ -50,7 +59,7 @@ class WorldState:
         self.spatial_index: SpatialGridIndex = SpatialGridIndex()
         self._pending_spatial_entities: Set[int] = set()
         self.event_queue: EventQueue = EventQueue()
-        self.event_journal: EventJournal = EventJournal()
+        self.event_journal: EventJournal = EventJournal(journal_dir=self.journal_dir)
         self.entities_touched_this_tick: Set[int] = set()
         self.audit_level: str = self.config.audit_level
         self._tick_rules_executed: int = 0
@@ -246,9 +255,15 @@ class WorldState:
         }
 
     @classmethod
-    def from_canonical_dict(cls, data: Dict[str, Any], config: Optional[RuntimeConfig] = None) -> WorldState:
+    def from_canonical_dict(
+        cls,
+        data: Dict[str, Any],
+        config: Optional[RuntimeConfig] = None,
+        world_id: Optional[str] = None,
+        journal_dir: Optional[Union[str, Path]] = None,
+    ) -> WorldState:
         """Reconstruct full world state from canonical dictionary."""
-        ws = cls(seed=0, config=config)
+        ws = cls(seed=0, config=config, world_id=world_id, journal_dir=journal_dir)
         ws._next_sequence_id = int(data.get("next_sequence_id", "1"))
         ws.clock = SimulationClock.from_dict(data["clock"])
         ws.rng.set_state(data["rng"])
@@ -261,7 +276,7 @@ class WorldState:
             ws.spatial_index = SpatialGridIndex.from_dict(data["spatial_index"])
         ws.event_queue = EventQueue.from_dict(data["event_queue"])
         if "event_journal" in data:
-            ws.event_journal = EventJournal.from_dict(data["event_journal"])
+            ws.event_journal = EventJournal.from_dict(data["event_journal"], journal_dir=ws.journal_dir)
         if "rules" in data and data["rules"]:
             from genesis.grl.registry import RuleRegistry
             ws.rule_registry = RuleRegistry.from_canonical_dict(data["rules"], config=config)

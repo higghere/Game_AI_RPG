@@ -155,7 +155,6 @@ class JournalSegmentMeta:
         return {
             "epoch": self.epoch,
             "filename": self.filename,
-            "filepath": self.filepath,
             "start_tick": self.start_tick,
             "end_tick": self.end_tick,
             "start_sequence_id": str(self.start_sequence_id),
@@ -167,11 +166,15 @@ class JournalSegmentMeta:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> JournalSegmentMeta:
+    def from_dict(cls, data: Dict[str, Any], journal_dir: Optional[Union[str, Path]] = None) -> JournalSegmentMeta:
+        filename = data["filename"]
+        fp = data.get("filepath")
+        if not fp:
+            fp = str(Path(journal_dir) / filename) if journal_dir else filename
         return cls(
             epoch=int(data["epoch"]),
-            filename=data["filename"],
-            filepath=data["filepath"],
+            filename=filename,
+            filepath=fp,
             start_tick=int(data["start_tick"]),
             end_tick=int(data["end_tick"]),
             start_sequence_id=int(data["start_sequence_id"]),
@@ -358,9 +361,9 @@ class EventJournal:
     def read_segment_records(self, seg: JournalSegmentMeta) -> List[EventRecord]:
         """Read and parse all EventRecords from an uncompressed segment file."""
         records: List[EventRecord] = []
-        filepath = Path(seg.filepath)
-        if not filepath.exists():
-            filepath = self.journal_dir / seg.filename
+        filepath = self.journal_dir / seg.filename
+        if not filepath.exists() and seg.filepath:
+            filepath = Path(seg.filepath)
         if not filepath.exists():
             raise JournalTamperError(f"Segment file missing on disk: {filepath}")
         with open(filepath, "rb") as f:
@@ -376,9 +379,9 @@ class EventJournal:
         Checks uncompressed file SHA-256 and continuous hash chain.
         Raises JournalTamperError on any tampering.
         """
-        filepath = Path(seg.filepath)
-        if not filepath.exists():
-            filepath = self.journal_dir / seg.filename
+        filepath = self.journal_dir / seg.filename
+        if not filepath.exists() and seg.filepath:
+            filepath = Path(seg.filepath)
         if not filepath.exists():
             raise JournalTamperError(f"Segment file missing: {filepath}")
 
@@ -489,7 +492,7 @@ class EventJournal:
             if seg.end_tick <= snapshot_tick:
                 valid_segments.append(seg)
             else:
-                p = Path(seg.filepath)
+                p = self.journal_dir / seg.filename
                 if p.exists():
                     quarantine_path = p.with_suffix(".orphaned_post_crash")
                     os.replace(p, quarantine_path)
@@ -509,14 +512,13 @@ class EventJournal:
         # Check for any orphaned segment files on disk in journal_dir
         if self.journal_dir.exists():
             for f in self.journal_dir.glob("journal_epoch_*.jsonl"):
-                is_valid = any(Path(s.filepath).name == f.name for s in valid_segments)
+                is_valid = any(s.filename == f.name for s in valid_segments)
                 if not is_valid:
                     quarantine_path = f.with_suffix(".orphaned_post_crash")
                     os.replace(f, quarantine_path)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "journal_dir": str(self.journal_dir),
             "epoch_size": self.epoch_size,
             "last_hash": self._last_hash,
             "latest_segment_hash": self._latest_segment_hash,
@@ -526,15 +528,15 @@ class EventJournal:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], journal_dir: Optional[str] = None) -> EventJournal:
-        dir_to_use = journal_dir or data.get("journal_dir")
+    def from_dict(cls, data: Dict[str, Any], journal_dir: Optional[Union[str, Path]] = None) -> EventJournal:
+        dir_to_use = journal_dir or "data/journal"
         epoch_size = int(data.get("epoch_size", 365))
         journal = cls(journal_dir=dir_to_use, epoch_size=epoch_size)
         journal._last_hash = data.get("last_hash", GENESIS_BLOCK_HASH)
         journal._latest_segment_hash = data.get("latest_segment_hash", "")
         journal._latest_segment_file_hash = data.get("latest_segment_file_hash", "")
         for sdata in data.get("committed_segments", []):
-            journal._committed_segments.append(JournalSegmentMeta.from_dict(sdata))
+            journal._committed_segments.append(JournalSegmentMeta.from_dict(sdata, journal_dir=journal.journal_dir))
         for rdata in data.get("records", []):
             journal._records.append(EventRecord.from_dict(rdata))
         return journal

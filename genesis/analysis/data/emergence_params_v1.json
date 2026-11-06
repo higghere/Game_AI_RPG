@@ -1,6 +1,6 @@
 {
   "cultural_spread": {
-    "max_ancestor_generation_depth": 2,
+    "max_common_ancestor_generations": 4,
     "min_adopter_absolute": 8,
     "min_adopter_fraction": "0.100000",
     "min_distinct_lineages": 3,
@@ -13,10 +13,11 @@
   "group": {
     "community_detection_max_iterations": 20,
     "max_kin_generation_depth": 2,
+    "min_active_years": 2,
     "min_cohesion_ratio": "2.000000",
     "min_internal_density": "0.200000",
     "min_jaccard_similarity": "0.500000",
-    "min_members": 5,
+    "min_members": 8,
     "min_non_kin_edge_fraction": "0.300000",
     "min_turnover_fraction": "0.500000",
     "persistence_ticks": 3650,
@@ -38,6 +39,7 @@
     "persistence_ticks": 1825,
     "persistence_years": 5,
     "radius_cells": 2,
+    "resource_weighted_null_percentile": 99,
     "sample_interval_ticks": 365,
     "stockpile_enrichment_ratio_min": "1.500000"
   },

@@ -1,17 +1,17 @@
 # GENESIS Alpha — Pre-Registered Definitions of Emergence
 ## Quantitative Operational Specifications for Settlement, Group, and Cultural Spread
 
-**Document Version:** `v1.0.0`  
-**Status:** Pre-Registered Specification — Pending Human Approval (Stage 1 Gate)  
+**Document Version:** `v1.1.0` (Approved Baseline `v1`)  
+**Status:** Pre-Registered Specification — Approved by Human Evaluator  
 **Hash-Pinned Parameters File:** `genesis/analysis/data/emergence_params_v1.json`  
-**Canonical Parameters SHA-256:** `f8df1daa97274bfb05219634b8baf48311b044a12425d8253333efb9b4966d50`  
+**Canonical Parameters SHA-256:** `9dc8c96b152a63d118070a2c15dbea0806522a1a0e391477a2b895ea55548591`  
 
 ---
 
 ## 1. Executive Summary & Core Principles
 
 ### 1.1 The Anti-Storytelling Invariant
-In GENESIS, an LLM describing a civilization, tribe, or religious revival is **not** evidence that one emerged. Simulation success is measured strictly from the computational simulation state. Prior to this specification, terms like *"settlement"*, *"group"*, and *"cultural spread"* lacked operational mathematical definitions, risking confirmation bias where random stochastic noise or environmental bottlenecks are post-hoc labeled as emergent social order.
+In GENESIS, an LLM describing a civilization, tribe, or religious revival is **not** evidence that one emerged. Simulation success is measured strictly from the computational simulation state. Prior to this specification, terms like *"settlement"*, *"group"*, and *"cultural spread"* lacked operational mathematical definitions, risking confirmation bias where random stochastic noise, genetic drift, or environmental bottlenecks are post-hoc labeled as emergent social order.
 
 This specification pre-registers exact, falsifiable, quantitative definitions for these three phenomena **before any Phase 3 agent, trait, genome, or cognitive architecture is authored**. The parameters defined herein are frozen in `emergence_params_v1.json` and cannot be retroactively adjusted after observing simulation results.
 
@@ -34,9 +34,11 @@ This specification pre-registers exact, falsifiable, quantitative definitions fo
 |    SETTLEMENT     |              |       GROUP       |              |  CULTURAL SPREAD  |
 | - Spatial Cluster |              | - Co-op Network   |              | - Social Learning |
 | - 5-Yr Persistence|              | - Community LPA   |              | - Beyond Lineage  |
-| - Generational    |              | - 10-Yr Turnover  |              | - Copy Fidelity   |
-|   Anchoring (30%) |              | - Non-Kin Bounds  |              | - Post-Founder    |
-| - Permutation Null|              | - Degree Swap Null|              | - Random Null     |
+| - Generational    |              | - Size >= 8       |              |   (Common Ancestor|
+|   Anchoring (30%) |              | - Multi-Yr Repeat |              |    > 4 Gens)      |
+| - Dual Null Tests:|              | - 10-Yr Turnover  |              | - Copy Fidelity   |
+|   1. Uniform Null |              | - Non-Kin Bounds  |              | - Post-Founder    |
+|   2. Oasis Null   |              | - Degree Swap Null|              | - Random Null     |
 +-------------------+              +-------------------+              +-------------------+
 ```
 
@@ -61,7 +63,8 @@ class AnalysisBinding:
     cooperation_event_types: Tuple[str, ...]     # e.g. ("trade_executed", "tax_remitted", "gift_given")
     practice_property: str                       # e.g. "farming_technique", "ritual_practice"
     adoption_event_type: str                     # e.g. "practice_adopted", "technique_learned"
-    stockpile_resource_property: Optional[str]   # e.g. "grain", "coins" (None if unbounded)
+    stockpile_resource_property: Optional[str]   # e.g. "grain", "coins" (None if unbound)
+    resource_landscape_property: Optional[str]   # e.g. "soil_water", "carrying_capacity" (None if uniform)
 ```
 
 ### 1.4 Strict Determinism, Invariant Verification, and Null Randomness
@@ -79,31 +82,36 @@ All threshold values are serialized in `genesis/analysis/data/emergence_params_v
 ```
 File Path: genesis/analysis/data/emergence_params_v1.json
 Canonical Serialization: UTF-8, Sort Keys, Indent 2, LF Line Endings
-Canonical SHA-256: f8df1daa97274bfb05219634b8baf48311b044a12425d8253333efb9b4966d50
+Canonical SHA-256: 9dc8c96b152a63d118070a2c15dbea0806522a1a0e391477a2b895ea55548591
 ```
 
 ### 2.1 Governance & Change Rules
-- **Frozen Baseline:** Version `v1` is frozen once approved by the human evaluator.
+- **Frozen Baseline:** Version `v1` is frozen upon approval.
 - **Immutability:** Existing tests must recompute the SHA-256 of `emergence_params_v1.json` and fail if modified by a single byte.
-- **Prospective Versioning:** Any future modification requires creating a separate file `emergence_params_v2.json` with its own unique hash, an accompanying changelog documenting the theoretical justification, and an explicit declaration of whether the adjustment was motivated by inspecting simulation outputs. Version `v1` remains in the repository with its tests permanently green.
+- **Changelog for Version `v1` (Post-Review Approvals):**
+  1. *Oasis Null Added:* Added a second resource-landscape-weighted spatial null model. Settlements must beat both uniform null and resource-weighted null at 99th percentile ($p \le 0.01$).
+  2. *Group Size & Temporal Repetition:* Raised `min_members` from 5 to 8, and added `min_active_years: 2` requiring cooperation edges to be active across $\ge 2$ distinct annual sample windows.
+  3. *Extended Kin Horizon for Culture:* Tightened kin definition to treat any shared common ancestor within $k_{\text{common\_ancestor}} \le 4$ generations as kin, preventing cousin lineages from masquerading as horizontal social transmission.
+  4. *Unbound-Stockpile Caveat:* Explicitly report `"stockpile not assessed"` when `stockpile_resource_property` is unbound.
 
 ---
 
 ## 3. Operational Definition 1: Settlement
 
 ### 3.1 Intuition
-A settlement is a spatial cluster of agents that is statistically denser than chance, persists across multiple years/generations, and demonstrates generational residency ("born in place"), not a transient nomadic camp, resource-chokepoint queue, or temporary foraging congregation.
+A settlement is a spatial cluster of agents that is statistically denser than chance, persists across multiple years/generations, and demonstrates generational residency ("born in place"), not a transient nomadic camp, resource-chokepoint queue, or temporary foraging congregation at a fertile oasis.
 
 ### 3.2 State & Journal Inputs
 1. **Active Living Agents:** Queried at sample ticks $t_k \in \{t_0, t_0 + \Delta t, \dots, t_{\text{end}}\}$ where $\Delta t = \text{sample\_interval\_ticks}$ ($365$ ticks / $1$ year).
 2. **Spatial Grid Coordinates:** Entity properties `cell_x` and `cell_y` for all active agents.
 3. **Birth / Creation Records:** Historical birth records from the append-only event journal (`entity_spawned` / `entity_created` events) recording `(entity_id, tick, birth_cell_x, birth_cell_y)`.
 4. **Stockpile Levels (Optional):** Local resource pool balances or entity inventory properties per cell.
+5. **Resource Landscape (Optional/Carrying Capacity):** Local environmental fertility or carrying capacity per cell (`resource_landscape_property`).
 
 ### 3.3 Mathematical Formulation & Sub-Criteria
 
 #### Criterion 1.1: Spatial Clustering ($R_s, N_{\text{min}}$)
-Let $A(t)$ be the set of active living agents at tick $t$. Two occupied cells $c_1 = (x_1, y_1)$ and $c_2 = (x_2, y_2)$ are connected if their Chebyshev distance satisfies:
+Two occupied cells $c_1 = (x_1, y_1)$ and $c_2 = (x_2, y_2)$ are connected if their Chebyshev distance satisfies:
 $$D_{\text{Chebyshev}}(c_1, c_2) = \max(|x_1 - x_2|, |y_1 - y_2|) \le R_s \quad (\text{default } R_s = 2)$$
 
 Connected cells partition the agent population into spatial connected components $\{C_1, C_2, \dots\}$. A candidate settlement component $C$ must satisfy:
@@ -117,29 +125,32 @@ Cluster continuity across consecutive samples $t_k \to t_{k+1}$ is established v
 $$J(C_k, C_{k+1}) = \frac{|C_k \cap C_{k+1}|}{|C_k \cup C_{k+1}|} \ge J_{\text{min}} \quad (\text{default } J_{\text{min}} = 0.50)$$
 If multiple components at $t_{k+1}$ achieve $J \ge J_{\text{min}}$, the component with the highest $J$ is selected; ties are broken by the lowest minimum entity ID.
 
-For each sample $k$, the spatial centroid $(\bar{x}_k, \bar{y}_k)$ is computed as the integer median or truncated mean of member coordinates. Centroid drift between consecutive annual samples must satisfy:
+Centroid drift between consecutive annual samples must satisfy:
 $$\max(|\bar{x}_{k+1} - \bar{x}_k|, |\bar{y}_{k+1} - \bar{y}_k|) \le D_{\text{max}} \quad (\text{default } D_{\text{max}} = 2 \text{ cells})$$
 
 #### Criterion 1.3: Generational Anchoring ($f_{\text{born\_min}}$)
-At the conclusion of the persistence window ($t_{\text{end}} = t_0 + T_{\text{persist}}$), let $C(t_{\text{end}})$ be the tracked settlement component.
-Let $U_{\text{footprint}}$ be the cumulative spatial footprint of the settlement across its 5-year history:
+At the conclusion of the persistence window ($t_{\text{end}} = t_0 + T_{\text{persist}}$), let $U_{\text{footprint}}$ be the cumulative spatial footprint of the settlement across its 5-year history:
 $$U_{\text{footprint}} = \bigcup_{k=0}^{5} \text{Cells}(C(t_k))$$
 
 For each resident $a \in C(t_{\text{end}})$, its birthplace cell $(x_b(a), y_b(a))$ is extracted from its journal birth record. The born-in-place fraction must satisfy:
 $$\text{BornInFraction}(C) = \frac{|\{a \in C(t_{\text{end}}) \mid (x_b(a), y_b(a)) \in U_{\text{footprint}}\}|}{|C(t_{\text{end}})|} \ge f_{\text{born\_min}} \quad (\text{default } f_{\text{born\_min}} = 0.30 \text{ or } 30\%)$$
-This requirement ensures the cluster is a stationary habitat producing native offspring, rather than a transient congregation of migratory travelers.
 
-#### Criterion 1.4: Statistical Significance vs. Spatial Permutation Null
-The observed maximum component size $S_{\text{obs}} = |C(t_{\text{end}})|$ is tested against a spatial null model:
-- **Null Model:** $K_{\text{null}} = 200$ iterations.
-- In each iteration $k$, the total living agent population $N_{\text{living}}$ is distributed uniformly at random across the bounding extent of all occupied cells at $t_{\text{end}}$, using an isolated analysis PRNG stream.
-- The largest connected component size $S_{\text{null}}^{(k)}$ is computed using the identical radius $R_s = 2$.
-- **Verdict Requirement:** $S_{\text{obs}}$ must exceed the 99th percentile of $S_{\text{null}}$ ($k = 198$ in sorted null distribution, corresponding to empirical $p \le 0.01$).
+#### Criterion 1.4: Dual Statistical Significance vs. Spatial Null Models
+To prevent both random clusters and environmental oasis congregations from masquerading as settlements, the observed maximum component size $S_{\text{obs}} = |C(t_{\text{end}})|$ must beat **two separate null models**:
+1. **Uniform Spatial Permutation Null:**
+   - In each of $K_{\text{null}} = 200$ iterations, active agents are re-placed uniformly at random across the bounding extent of all occupied cells.
+   - $S_{\text{obs}}$ must exceed the 99th percentile of $S_{\text{uniform\_null}}$ ($p \le 0.01$).
+2. **Resource-Landscape-Weighted Spatial Null (The Oasis Guard):**
+   - In each of $K_{\text{null}} = 200$ iterations, active agents are re-placed across cells with probability proportional to the local environmental resource abundance:
+     $$P(\text{cell } c) = \frac{\max(1, \text{Resource}(c))}{\sum_{c'} \max(1, \text{Resource}(c'))}$$
+     *(If no resource property is bound, cell weights default to uniform).*
+   - $S_{\text{obs}}$ must exceed the 99th percentile of $S_{\text{resource\_weighted\_null}}$ ($p \le 0.01$).
+   - A congregation of organisms clustered solely because an oasis contains 90% of the world's water will generate equally dense clusters in the resource-weighted null, and thus **fails** this criterion.
 
 #### Criterion 1.5: Stockpile Enrichment (Optional)
 If `stockpile_resource_property` is bound, the mean stockpile per cell within $U_{\text{footprint}}$ is compared against the mean stockpile across all other occupied cells:
 $$\text{EnrichmentRatio} = \frac{\text{MeanStockpile}(U_{\text{footprint}})}{\max(1, \text{MeanStockpile}(\text{RestOfWorld}))} \ge 1.50$$
-If no stockpile property is bound, this sub-criterion evaluates to `NOT_APPLICABLE` and does not affect the settlement pass/fail verdict.
+If `stockpile_resource_property` is unbound (or None), the sub-criterion evaluates to `NOT_ASSESSED` and explicitly outputs `"stockpile not assessed"`. It does not block the settlement verdict.
 
 ---
 
@@ -173,36 +184,36 @@ Communities are extracted using a strictly deterministic Weighted Label Propagat
 
 #### Criterion 2.3: Membership Size, Internal Density, and Cohesion Ratio
 A detected community $G_{\text{cand}}$ must satisfy:
-1. **Size:** $|G_{\text{cand}}| \ge G_{\text{min}} \quad (\text{default } G_{\text{min}} = 5 \text{ members})$.
+1. **Size:** $|G_{\text{cand}}| \ge G_{\text{min}} \quad (\text{default } G_{\text{min}} = 8 \text{ members})$.
 2. **Internal Edge Density:**
    $$\rho(G_{\text{cand}}) = \frac{2 \cdot |E_{\text{int}}(G_{\text{cand}})|}{|G_{\text{cand}}|(|G_{\text{cand}}| - 1)} \ge \rho_{\text{min}} \quad (\text{default } \rho_{\text{min}} = 0.20 \text{ or } 20\%)$$
 3. **Cohesion Ratio (Inside vs. Outside Weight):**
    $$W_{\text{int}} = \sum_{u, v \in G_{\text{cand}}, u < v} w(u, v), \quad W_{\text{ext}} = \sum_{u \in G_{\text{cand}}, v \notin G_{\text{cand}}} w(u, v)$$
    $$R_{\text{cohesion}} = \frac{W_{\text{int}}}{\max(1, W_{\text{ext}})} \ge R_{\text{cohesion\_min}} \quad (\text{default } R_{\text{cohesion\_min}} = 2.00)$$
 
-#### Criterion 2.4: Extended Social Structure (Non-Kin Bound)
+#### Criterion 2.4: Multi-Year Temporal Repetition (Anti-Burst Guard)
+To prevent a one-off burst of transactions within a short window from qualifying as a group, the group's cooperation edges must exhibit activity across at least:
+$$\text{ActiveYears}(G_{\text{cand}}) \ge \text{min\_active\_years} \quad (\text{default } 2 \text{ separate annual sample windows})$$
+
+#### Criterion 2.5: Extended Social Structure (Non-Kin Bound)
 Kinship is defined on the undirected graph spanned by `parent_of` edges. Two agents $u, v$ are defined as **immediate kin** if their shortest path distance on the kinship graph satisfies:
 $$d_{\text{kin}}(u, v) \le d_{\text{kin\_max}} \quad (\text{default } d_{\text{kin\_max}} = 2)$$
 This encompasses parent-child ($d=1$), siblings ($d=2$ via common parent), and grandparent-grandchild ($d=2$).
 
 Let $E_{\text{int}}(G_{\text{cand}})$ be the internal cooperation edges of the group. The fraction of internal edges connecting non-kin agents must satisfy:
 $$f_{\text{non\_kin\_edges}} = \frac{|\{(u, v) \in E_{\text{int}}(G_{\text{cand}}) \mid d_{\text{kin}}(u, v) > 2\}|}{|E_{\text{int}}(G_{\text{cand}})|} \ge f_{\text{non\_kin\_min}} \quad (\text{default } 0.30 \text{ or } 30\%)$$
-A cluster where $100\%$ of interactions connect parents, offspring, or siblings is classified as a *nuclear family clique* and fails the group emergence verdict.
 
-#### Criterion 2.5: Institutional Persistence Through Generational Turnover
+#### Criterion 2.6: Institutional Persistence Through Generational Turnover
 The group must persist across $T_{\text{group}} = 3650 \text{ ticks}$ ($10$ years) sampled annually ($\Delta t = 365$ ticks):
 - Community identity between consecutive samples is tracked via Jaccard similarity $\ge 0.50$.
 - Let $G(t_0)$ be the founding cohort of the group at tick $t_0$, and $G(t_{\text{end}})$ be the cohort at tick $t_0 + T_{\text{group}}$.
 - Generational turnover measures the fraction of original founding members that have died or departed:
   $$\text{Turnover} = 1.0 - \frac{|G(t_{\text{end}}) \cap G(t_0)|}{|G(t_0)|} \ge \tau_{\text{min}} \quad (\text{default } \tau_{\text{min}} = 0.50 \text{ or } 50\%)$$
-At least half of the original members have been replaced, demonstrating that the group exists as an institutional entity independent of specific founding individuals.
 
-#### Criterion 2.6: Statistical Significance vs. Degree-Preserving Randomization Null
+#### Criterion 2.7: Statistical Significance vs. Degree-Preserving Randomization Null
 The observed cohesion ratio $R_{\text{cohesion}}$ is evaluated against a degree-preserving graph randomization null:
-- **Null Model:** $K_{\text{null}} = 200$ iterations.
-- In each iteration $k$, the observed interaction graph undergoes Maslov-Sneppen edge-swapping (stub rewiring) preserving the exact degree sequence of every node, using an isolated analysis PRNG stream.
-- The cohesion ratio $R_{\text{null}}^{(k)}$ for the vertex subset $G_{\text{cand}}$ is computed on the rewired graph.
-- **Verdict Requirement:** Observed $R_{\text{cohesion}}$ must exceed the 99th percentile of $R_{\text{null}}$ ($p \le 0.01$).
+- In each of $K_{\text{null}} = 200$ iterations, the observed interaction graph undergoes Maslov-Sneppen edge-swapping preserving the exact degree sequence of every node.
+- Observed $R_{\text{cohesion}}$ must exceed the 99th percentile of $R_{\text{null}}$ ($p \le 0.01$).
 
 ---
 
@@ -220,16 +231,16 @@ Cultural spread means a learned practice moves between individuals via social tr
 
 ### 5.3 Mathematical Formulation & Sub-Criteria
 
-#### Criterion 3.1: Social Transmission Beyond Kin Lineage
+#### Criterion 3.1: Social Transmission Beyond Extended Kinship ($k_{\text{common\_ancestor}} \le 4$)
 Let $E_{\text{adopt}}$ be the set of recorded adoption events for practice $P$ over the evaluation window:
-- For each event $e = (t, A, S)$, the genealogical relationship between adopter $A$ and mentor/source $S$ is evaluated on the directed `parent_of` graph.
-- $S$ is an **ancestor** of $A$ if there is a directed path from $S$ to $A$ with length $\le k_{\text{gen\_ancestor}} = 2$ (parent or grandparent).
+- For each event $e = (t, A, S)$, the genealogical relationship between adopter $A$ and mentor/source $S$ is evaluated on the directed `parent_of` genealogy.
+- **Extended Kin Definition:** $A$ and $S$ are defined as kin if they share **any common ancestor within $k_{\text{common\_ancestor}} \le 4$ generations** (parents, grandparents, great-grandparents, or great-great-grandparents, covering first, second, and third cousins).
+- An adoption event is strictly **non-kin transmission** if and only if $A$ and $S$ share zero common ancestors within $4$ generations.
 - The non-kin transmission fraction must satisfy:
-  $$f_{\text{non\_kin\_trans}} = \frac{|\{e = (t, A, S) \mid S \text{ is not an ancestor of } A \text{ within } 2 \text{ gen}\}|}{|E_{\text{adopt}}|} \ge f_{\text{non\_kin\_trans\_min}} \quad (\text{default } 0.50 \text{ or } 50\%)$$
+  $$f_{\text{non\_kin\_trans}} = \frac{|\{e = (t, A, S) \mid A \text{ and } S \text{ share no common ancestor } \le 4 \text{ gen}\}|}{|E_{\text{adopt}}|} \ge f_{\text{non\_kin\_trans\_min}} \quad (\text{default } 0.50 \text{ or } 50\%)$$
 
-Additionally, let $A_{\text{all}}$ be all agents that ever adopted practice $P$. Tracing backwards to the foundational lineage roots (ancestors with no parents in the graph):
+Additionally, let $A_{\text{all}}$ be all agents that ever adopted practice $P$. Tracing backwards to the foundational lineage roots:
 $$\text{DistinctLineageRoots}(A_{\text{all}}) \ge L_{\text{min}} \quad (\text{default } L_{\text{min}} = 3 \text{ distinct lineages})$$
-The practice cannot be a private family trait passed strictly within one extended clan.
 
 #### Criterion 3.2: Demographic and Spatial Reach
 At evaluation tick $t_{\text{eval}}$:
@@ -245,39 +256,27 @@ Let $F_0$ be the original founder of practice $P$ at tick $t_{\text{intro}}$. At
 - $N_{\text{desc}}(t_{\text{eval}})$: Number of living genetic descendants of founder $F_0$ at $t_{\text{eval}}$.
 - Speed ratio:
   $$R_{\text{speed}} = \frac{N_{\text{cult}}(t_{\text{eval}})}{\max(1, N_{\text{desc}}(t_{\text{eval}}))} \ge R_{\text{speed\_min}} \quad (\text{default } R_{\text{speed\_min}} = 2.00)$$
-Cultural diffusion must outpace biological reproduction by at least a $2:1$ ratio.
 
 #### Criterion 3.4: Copying Fidelity
-When practice $P$ is transmitted from source $S$ to adopter $A$, the adopted value must match the source value without corruptive noise or random mutation:
+When practice $P$ is transmitted from source $S$ to adopter $A$, the adopted value must match the source value without corruptive noise:
 $$\text{Fidelity} = \frac{|\{e \in E_{\text{adopt}} \mid \text{value}(A) == \text{value}(S)\}|}{|E_{\text{adopt}}|} \ge f_{\text{fidelity\_min}} \quad (\text{default } 0.90 \text{ or } 90\%)$$
 
 #### Criterion 3.5: Post-Founder Generational Persistence
-Let $\mathcal{F}$ be the set of initial founding adopters who introduced or held practice $P$ in the first year of its appearance.
-At evaluation tick $t_{\text{eval}}$, **all** founding adopters must be deceased:
+Let $\mathcal{F}$ be the set of initial founding adopters. At evaluation tick $t_{\text{eval}}$, **all** founding adopters must be deceased:
 $$\forall f \in \mathcal{F}, \quad \text{is\_alive}(f) == 0$$
 The count of active living agents still holding and practicing $P$ must satisfy:
 $$N_{\text{post\_founder\_adopters}}(t_{\text{eval}}) \ge N_{\text{post\_founder\_min}} \quad (\text{default } 5 \text{ agents})$$
-Cultural transmission must outlive the lifespan of its initiators.
 
 #### Criterion 3.6: Statistical Significance vs. Random Adoption Null
-The observed non-kin transmission fraction and spatial clustering (mean pairwise distance) are tested against a null model:
-- **Null Model:** $K_{\text{null}} = 200$ iterations.
-- In each iteration $k$, the timing of recorded adoptions is held fixed, but the adopter and source identities are reassigned uniformly at random among agents alive at that tick, using an isolated analysis PRNG stream.
-- **Verdict Requirement:** Observed non-kin transmission fraction and spatial clustering must exceed the 99th percentile of the null distribution ($p \le 0.01$).
+In each of $K_{\text{null}} = 200$ iterations, the timing of recorded adoptions is held fixed, but adopter and source identities are reassigned uniformly at random among agents alive at that tick.
+- Observed non-kin transmission fraction and spatial clustering must exceed the 99th percentile of the null distribution ($p \le 0.01$).
 
 ---
 
 ## 6. Cross-Cutting Standards & Structured Verdict Schema
 
 ### 6.1 State-Only Evidence Invariant
-A metric may inspect:
-- Living entity property state (`EntityManager`).
-- Directed graph edges and weights (`RelationshipGraph`).
-- Spatial occupancy and cell grids (`SpatialGridIndex`).
-- Resource pool balances (`ResourceRegistry`).
-- Append-only event records (`EventJournal`).
-
-A metric must **never** read, parse, or evaluate any natural language text, prompt, or LLM-generated commentary.
+A metric may inspect entity property state, relationship graphs, spatial indices, resource balances, and event journals. A metric must **never** read, parse, or evaluate any natural language text or LLM commentary.
 
 ### 6.2 Structured Verdict Schema
 Every measurement returns a deterministic dictionary adhering strictly to the following JSON structure:
@@ -286,7 +285,7 @@ Every measurement returns a deterministic dictionary adhering strictly to the fo
 {
   "phenomenon": "settlement",
   "params_version": "v1",
-  "params_sha256": "f8df1daa97274bfb05219634b8baf48311b044a12425d8253333efb9b4966d50",
+  "params_sha256": "9dc8c96b152a63d118070a2c15dbea0806522a1a0e391477a2b895ea55548591",
   "passed": false,
   "evaluated_ticks": {
     "start_tick": 0,
@@ -315,18 +314,31 @@ Every measurement returns a deterministic dictionary adhering strictly to the fo
       "threshold_born_in_fraction": "0.300000",
       "margin": "-0.150000"
     },
-    "significance_vs_null": {
+    "significance_uniform_null": {
       "passed": true,
       "null_model": "spatial_uniform_permutation",
       "k_permutations": 200,
       "observed_statistic": 12,
-      "null_50th_percentile": 4,
       "null_99th_percentile": 7,
       "p_value_bound": "0.005000"
+    },
+    "significance_resource_weighted_null": {
+      "passed": false,
+      "null_model": "spatial_resource_weighted_permutation",
+      "k_permutations": 200,
+      "observed_statistic": 12,
+      "null_99th_percentile": 14,
+      "p_value_bound": "0.120000"
+    },
+    "stockpile_enrichment": {
+      "status": "NOT_ASSESSED",
+      "note": "stockpile not assessed",
+      "passed": true
     }
   },
   "failure_reasons": [
-    "Generational anchoring failed: observed born-in fraction 0.150000 < threshold 0.300000 (margin: -0.150000)"
+    "Generational anchoring failed: observed born-in fraction 0.150000 < threshold 0.300000 (margin: -0.150000)",
+    "Resource-weighted null significance failed: observed 12 did not exceed 99th percentile 14 (oasis congregation)"
   ]
 }
 ```
@@ -336,9 +348,8 @@ A verdict is never a bare boolean. When a candidate fails, `failure_reasons` lis
 
 ### 6.4 Multiple Comparisons Control
 When evaluating $M$ candidate entities, clusters, or sliding time windows across a world:
-1. **Max-Statistic Null Model:** Significance null models evaluate the **global maximum statistic** (e.g. largest component size or highest cohesion ratio across all detected components in each permutation iteration $k$). Comparing the observed statistic directly against the 99th percentile of the maximum-statistic distribution provides exact Family-Wise Error Rate (FWER) control at $\alpha = 0.01$ without requiring loss of statistical power.
-2. **Discrete Candidate Hypothesis Testing:** If testing $M$ independent candidate hypotheses simultaneously without max-statistic pooling, the required significance threshold applies a strict Bonferroni correction:
-   $$\alpha_{\text{corrected}} = \frac{0.01}{M}$$
+1. **Max-Statistic Null Model:** Significance null models evaluate the **global maximum statistic** across all detected components in each permutation iteration $k$, providing exact Family-Wise Error Rate (FWER) control at $\alpha = 0.01$.
+2. **Discrete Candidate Hypothesis Testing:** If testing $M$ independent candidate hypotheses simultaneously without max-statistic pooling, the required significance threshold applies a strict Bonferroni correction: $\alpha_{\text{corrected}} = 0.01 / M$.
 
 ---
 
@@ -359,10 +370,12 @@ The following parameters are hash-pinned in `genesis/analysis/data/emergence_par
 | **Settlement** | `max_centroid_drift_cells`| `INT64`| `2` | Cells/Yr | Prevents nomadic herds from qualifying as stationary settlements |
 | **Settlement** | `min_born_in_fraction` | `FIXED_POINT`| `"0.300000"` | Ratio | 30% born-in-place ensures demographic reproduction, not immigrant flux |
 | **Settlement** | `stockpile_enrichment_ratio_min`| `FIXED_POINT`| `"1.500000"` | Ratio | 50% surplus over ambient baseline if stockpile bound |
-| **Group** | `min_members` | `INT64` | `5` | Agents | Minimum community size beyond isolated pairs or triads |
+| **Settlement** | `resource_weighted_null_percentile`| `INT64` | `99` | Percentile | Requires exceeding 99th percentile of resource landscape null (oasis guard) |
+| **Group** | `min_members` | `INT64` | `8` | Agents | Raised to 8: prevents small trading triads plus hangers-on from qualifying |
 | **Group** | `min_internal_density` | `FIXED_POINT`| `"0.200000"` | Ratio | At least 20% of all possible internal bilateral edges must exist |
 | **Group** | `min_cohesion_ratio` | `FIXED_POINT`| `"2.000000"` | Ratio | Internal cooperation weight must be $\ge 2\times$ external weight |
-| **Group** | `max_kin_generation_depth`| `INT64` | `2` | Generations | Kin horizon: parent ($d=1$), sibling ($d=2$), grandparent ($d=2$) |
+| **Group** | `min_active_years` | `INT64` | `2` | Years | Cooperation edges must be active across $\ge 2$ distinct annual sample windows |
+| **Group** | `max_kin_generation_depth`| `INT64` | `2` | Generations | Direct kin horizon for graph edges |
 | **Group** | `min_non_kin_edge_fraction`| `FIXED_POINT`| `"0.300000"` | Ratio | $\ge 30\%$ non-kin ties ensures structure extends beyond nuclear family |
 | **Group** | `sample_interval_ticks`| `INT64` | `365` | 1 Year | Sampling frequency for group membership tracking |
 | **Group** | `persistence_ticks` | `INT64` | `3650` | 10 Years | Multi-decade institutional longevity |
@@ -370,7 +383,7 @@ The following parameters are hash-pinned in `genesis/analysis/data/emergence_par
 | **Group** | `min_jaccard_similarity`| `FIXED_POINT`| `"0.500000"` | Ratio | Group identity continuity across annual samples |
 | **Group** | `min_turnover_fraction` | `FIXED_POINT`| `"0.500000"` | Ratio | $\ge 50\%$ founders replaced proves persistence beyond individuals |
 | **Group** | `community_detection_max_iterations` | `INT64` | `20` | Iterations | Bounded execution cap for deterministic Weighted LPA |
-| **Culture** | `max_ancestor_generation_depth`| `INT64` | `2` | Generations | Distinguishes horizontal/oblique transmission from vertical parent inheritance |
+| **Culture** | `max_common_ancestor_generations`| `INT64` | `4` | Generations | Common ancestor within 4 generations counted as kin for transmission test |
 | **Culture** | `min_non_kin_transmission_fraction`| `FIXED_POINT`| `"0.500000"` | Ratio | Majority of adoptions ($\ge 50\%$) must occur between non-kin |
 | **Culture** | `min_distinct_lineages` | `INT64` | `3` | Roots | Spans at least 3 distinct genealogical root families |
 | **Culture** | `min_adopter_fraction` | `FIXED_POINT`| `"0.100000"` | Ratio | Reaches at least 10% of living population |
@@ -391,7 +404,7 @@ The following parameters are hash-pinned in `genesis/analysis/data/emergence_par
 
 This specification deliberately operationalizes only proto-social foundations. To avoid premature conceptual expansion, the following phenomena are **explicitly excluded** from the Alpha scope and must not be inferred from these metrics:
 
-1. **Linguistic Semantics & Grammar:** No syntax, grammar, dialect vocabulary, or symbolic discourse is measured. Cultural spread tracks discrete integer/FixedPoint practice property values.
+1. **Linguistic Semantics & Grammar:** No syntax, grammar, dialect vocabulary, or symbolic discourse is measured.
 2. **Religious & Mythological Systems:** No theological doctrines, rituals, or supernatural beliefs are represented.
 3. **Formal State Institutions & Jurisdictions:** No sovereign kingdoms, legal constitutions, or courts exist. Groups represent cooperative interaction clusters, not administrative states.
 4. **Macro-Economic Markets & Currencies:** No general price discovery, inflation, or international trade networks are modeled.

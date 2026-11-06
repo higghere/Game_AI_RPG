@@ -40,6 +40,13 @@ Alpha does **not** simulate a medieval kingdom, a sprawling RPG world, or a comp
 9. **Rule Execution Order & Single-Rule Rollback:** Rules execute ordered by `(-priority, rule_id)`. Operational quota breaches roll back only the offending rule, recording a failure event.
 10. **Schema & Rule Migration:** Explicitly **not supported in Alpha**. Breaking changes require a fresh simulation run.
 11. **Offline Purity:** No external network requests, cloud services, or external APIs are used anywhere in the codebase.
+12. **Spatial Grid Index & Locality Partitioning (Option A):**
+    - Entities are partitioned into discrete 2D spatial grid cells `(cx, cy)` using integer or FixedPoint coordinates (zero floats).
+    - Iteration is strictly deterministic: occupied cells are sorted by `(cx, cy)` ascending, and entities in each cell are sorted by `entity_id` ascending.
+    - Spatial-partitioned rules execute once per occupied cell per tick in sorted cell order, with a fresh per-cell budget of 256 operations.
+    - Matched/evaluated entities count toward the tick-wide aggregate cap (1,000 entities) tracked via $O(1)$ incremental accounting.
+    - Spatial state is serialized canonically into snapshots and can be deterministically rebuilt from entity properties (`cell_x`/`cell_y` or `pos_x`/`pos_y`), guaranteeing bit-identical state hashes across snapshot save and reload.
+    - Single-cell rollback: failure or quota breach in one cell rolls back only that cell's staged mutations, recording an event and allowing other cells to execute normally.
 
 ---
 
@@ -61,6 +68,7 @@ genesis/
 │   ├── properties.py         # Dynamic property schemas & validation
 │   ├── relationships.py      # Typed graph edges & deterministic queries
 │   ├── resources.py          # FixedPoint resource reservoirs & conservation checks
+│   ├── spatial.py            # SpatialGridIndex, 2D coordinates, cell queries, canonical serialization
 │   ├── events.py             # Deterministic event queue, phases, and hash-chain log
 │   └── world_state.py        # Central WorldState aggregating components
 ├── grl/

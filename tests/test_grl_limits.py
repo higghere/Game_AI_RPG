@@ -249,12 +249,17 @@ class TestGRLLimits(unittest.TestCase):
         )
 
         reg = RuleRegistry()
-        hash_A = reg.register_rule(rule_A, current_tick=world.clock.current_tick, world=world)
+        hash_A = reg.register_rule(rule_A, world=world)
         reg_B = RuleRegistry()
-        hash_B = reg_B.register_rule(rule_B, current_tick=world.clock.current_tick)
+        world_B = WorldState(seed=2)
+        hash_B = reg_B.register_rule(rule_B, world=world_B)
 
         # Full body hash must detect the difference in effects
         self.assertNotEqual(hash_A, hash_B, "Changing rule effect body must produce different hash")
+
+        # Calling register_rule without world must raise TypeError
+        with self.assertRaises(TypeError):
+            reg.register_rule(rule_A)  # missing required argument 'world'
 
         # Verify rule_installed event was appended to journal
         install_events = [e for e in world.event_journal.records if e.event_type == "rule_installed"]

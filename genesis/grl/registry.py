@@ -30,15 +30,16 @@ class RuleRegistry:
     def register_rule(
         self,
         rule: RuleDefinition,
-        current_tick: int,
-        world: Optional[WorldState] = None,
+        world: WorldState,
     ) -> str:
         """Statically validate, prospectively install, and hash the full canonical rule body.
 
-        Writes a 'rule_installed' event to the world journal if world is provided.
+        Writes a 'rule_installed' event to the world journal.
         """
         # 1. Validate statically
         self.validator.validate_rule(rule)
+
+        current_tick = world.clock.current_tick
 
         # 2. Prospective activation: tick + 1
         rule.active_from_tick = current_tick + 1
@@ -51,21 +52,20 @@ class RuleRegistry:
         self._rule_hashes[rule.rule_id] = rule_hash
 
         # 4. Write rule_installed journal event
-        if world is not None:
-            install_event = EventRecord(
-                tick=current_tick,
-                phase=PHASE_PRE_TICK,
-                priority=100,
-                sequence_id=world.next_sequence_id(),
-                event_type="rule_installed",
-                payload={
-                    "rule_id": rule.rule_id,
-                    "rule_hash": rule_hash,
-                    "version": rule.version,
-                    "active_from_tick": str(rule.active_from_tick),
-                },
-            )
-            world.event_journal.append(install_event)
+        install_event = EventRecord(
+            tick=current_tick,
+            phase=PHASE_PRE_TICK,
+            priority=100,
+            sequence_id=world.next_sequence_id(),
+            event_type="rule_installed",
+            payload={
+                "rule_id": rule.rule_id,
+                "rule_hash": rule_hash,
+                "version": rule.version,
+                "active_from_tick": str(rule.active_from_tick),
+            },
+        )
+        world.event_journal.append(install_event)
 
         return rule_hash
 

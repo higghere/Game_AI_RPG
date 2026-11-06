@@ -541,10 +541,6 @@ class TestPhase1Acceptance(unittest.TestCase):
         for _ in range(50):
             world.advance_tick()
 
-        # Compute hash of event history through tick 50
-        history_hash_at_50 = world.event_journal.hash_through_tick(50)
-        snap_path_50, snap_hash_at_50 = self.snapshot_mgr.save_snapshot(world, "snapshot_tick_50.json")
-
         # Install a new GRL rule at tick 50 (effective at tick 51 prospectively)
         rule_dict = {
             "rule_id": "rule_growth_at_51",
@@ -560,8 +556,12 @@ class TestPhase1Acceptance(unittest.TestCase):
             ],
         }
         rule = GRLParser().parse_rule(rule_dict)
-        registry.register_rule(rule, current_tick=world.clock.current_tick)
+        world.register_rule(rule)
         self.assertEqual(rule.active_from_tick, 51)
+
+        # Compute hash of event history through tick 50 (including rule_installed event)
+        history_hash_at_50 = world.event_journal.hash_through_tick(50)
+        snap_path_50, snap_hash_at_50 = self.snapshot_mgr.save_snapshot(world, "snapshot_tick_50.json")
 
         # Advance to tick 100 with the new rule actively running
         for _ in range(50):

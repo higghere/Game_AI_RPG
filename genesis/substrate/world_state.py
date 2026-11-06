@@ -53,7 +53,7 @@ class WorldState:
         if self.rule_registry is None:
             from genesis.grl.registry import RuleRegistry
             self.rule_registry = RuleRegistry(self.config)
-        return self.rule_registry.register_rule(rule, self.clock.current_tick, world=self)
+        return self.rule_registry.register_rule(rule, self)
 
     def next_sequence_id(self) -> int:
         """Return next strictly monotonic sequence ID for events."""

@@ -44,7 +44,15 @@ class WorldState:
         self.resources: ResourceRegistry = ResourceRegistry()
         self.event_queue: EventQueue = EventQueue()
         self.event_journal: EventJournal = EventJournal()
+        self.rule_registry: Optional[Any] = None
         self.rule_engine_callback: Optional[Callable[[WorldState], None]] = None
+
+    def register_rule(self, rule: Any) -> str:
+        """Register a rule prospectively, hashing full canonical body and writing rule_installed event."""
+        if self.rule_registry is None:
+            from genesis.grl.registry import RuleRegistry
+            self.rule_registry = RuleRegistry(self.config)
+        return self.rule_registry.register_rule(rule, self.clock.current_tick, world=self)
 
     def next_sequence_id(self) -> int:
         """Return next strictly monotonic sequence ID for events."""
@@ -77,6 +85,8 @@ class WorldState:
         # Phase 2: GRL_RULES
         if self.rule_engine_callback:
             self.rule_engine_callback(self)
+        elif self.rule_registry:
+            self.rule_registry.execute_active_rules(self)
 
         # Phase 3: RESOURCE_SETTLEMENT
         self.resources.audit_invariants()
@@ -117,6 +127,7 @@ class WorldState:
             "resources": self.resources.to_dict(),
             "event_queue": self.event_queue.to_dict(),
             "event_journal": self.event_journal.to_dict(),
+            "rules": self.rule_registry.to_canonical_dict() if self.rule_registry else {},
         }
 
     @classmethod
@@ -133,4 +144,7 @@ class WorldState:
         ws.event_queue = EventQueue.from_dict(data["event_queue"])
         if "event_journal" in data:
             ws.event_journal = EventJournal.from_dict(data["event_journal"])
+        if "rules" in data and data["rules"]:
+            from genesis.grl.registry import RuleRegistry
+            ws.rule_registry = RuleRegistry.from_canonical_dict(data["rules"], config=config)
         return ws

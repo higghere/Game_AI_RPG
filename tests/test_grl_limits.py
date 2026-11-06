@@ -17,6 +17,7 @@ from genesis.grl.ast import (
     UnaryOpNode,
 )
 from genesis.grl.interpreter import GRLInterpreter
+from genesis.grl.registry import RuleRegistry
 from genesis.grl.validator import GRLValidator
 from genesis.substrate.properties import EntityTypeSchema, PropertyDefinition, PropertyType
 from genesis.substrate.world_state import WorldState
@@ -226,6 +227,41 @@ class TestGRLLimits(unittest.TestCase):
         # Verify no tree was mutated
         for t in world.entities.get_entities_by_type("tree"):
             self.assertEqual(t.get_property("sap"), 10)
+
+    def test_full_canonical_rule_body_hashing_and_installation_event(self):
+        """Verify full AST body hashing (any effect change alters hash) and rule_installed event."""
+        world = WorldState(seed=5)
+        world.resources.create_pool("biomass", initial_balance=FixedPoint.from_int(100))
+
+        rule_A = RuleDefinition(
+            rule_id="r_growth",
+            name="Growth Rule",
+            version="1.0.0",
+            priority=10,
+            effects=[ProduceResourceNode("biomass", LiteralNode("INT64", 10))]
+        )
+        rule_B = RuleDefinition(
+            rule_id="r_growth",
+            name="Growth Rule",
+            version="1.0.0",
+            priority=10,
+            effects=[ProduceResourceNode("biomass", LiteralNode("INT64", 20))] # Different effect!
+        )
+
+        reg = RuleRegistry()
+        hash_A = reg.register_rule(rule_A, current_tick=world.clock.current_tick, world=world)
+        reg_B = RuleRegistry()
+        hash_B = reg_B.register_rule(rule_B, current_tick=world.clock.current_tick)
+
+        # Full body hash must detect the difference in effects
+        self.assertNotEqual(hash_A, hash_B, "Changing rule effect body must produce different hash")
+
+        # Verify rule_installed event was appended to journal
+        install_events = [e for e in world.event_journal.records if e.event_type == "rule_installed"]
+        self.assertEqual(len(install_events), 1)
+        self.assertEqual(install_events[0].payload["rule_id"], "r_growth")
+        self.assertEqual(install_events[0].payload["rule_hash"], hash_A)
+        self.assertEqual(install_events[0].payload["active_from_tick"], "1")
 
 
 if __name__ == "__main__":

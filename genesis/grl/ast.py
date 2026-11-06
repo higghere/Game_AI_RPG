@@ -144,3 +144,84 @@ class RuleDefinition:
     preconditions: List[GRLNode] = field(default_factory=list)
     effects: List[GRLNode] = field(default_factory=list)
     active_from_tick: int = 0
+
+
+def ast_to_canonical_dict(node: Any) -> Any:
+    """Convert AST node to canonical serializable dictionary."""
+    if isinstance(node, LiteralNode):
+        val = node.value
+        if isinstance(val, FixedPoint):
+            val = val.to_raw_string()
+        elif isinstance(val, int) and not isinstance(val, bool):
+            val = str(val)
+        return {"op": "LITERAL", "type": node.val_type, "value": val}
+    elif isinstance(node, GetPropertyNode):
+        return {"op": "GET_PROPERTY", "entity": node.entity_var, "property": node.property_name}
+    elif isinstance(node, GetResourceNode):
+        return {"op": "GET_RESOURCE", "pool": node.pool_name}
+    elif isinstance(node, HasRelationshipNode):
+        return {"op": "HAS_RELATIONSHIP", "source": node.source_var, "target": node.target_var, "rel_type": node.rel_type}
+    elif isinstance(node, BinaryOpNode):
+        return {"op": node.op, "left": ast_to_canonical_dict(node.left), "right": ast_to_canonical_dict(node.right)}
+    elif isinstance(node, UnaryOpNode):
+        return {"op": node.op, "operand": ast_to_canonical_dict(node.operand)}
+    elif isinstance(node, SetPropertyNode):
+        return {"op": "SET_PROPERTY", "entity": node.entity_var, "property": node.property_name, "value": ast_to_canonical_dict(node.value_expr)}
+    elif isinstance(node, AdjustPropertyNode):
+        return {"op": "ADJUST_PROPERTY", "entity": node.entity_var, "property": node.property_name, "delta": ast_to_canonical_dict(node.delta_expr)}
+    elif isinstance(node, ConsumeResourceNode):
+        return {"op": "CONSUME_RESOURCE", "pool": node.pool_name, "amount": ast_to_canonical_dict(node.amount_expr)}
+    elif isinstance(node, ProduceResourceNode):
+        return {"op": "PRODUCE_RESOURCE", "pool": node.pool_name, "amount": ast_to_canonical_dict(node.amount_expr)}
+    elif isinstance(node, TransferResourceNode):
+        return {"op": "TRANSFER_RESOURCE", "from_pool": node.from_pool, "to_pool": node.to_pool, "amount": ast_to_canonical_dict(node.amount_expr)}
+    elif isinstance(node, AddRelationshipNode):
+        d = {"op": "ADD_RELATIONSHIP", "source": node.source_var, "target": node.target_var, "rel_type": node.rel_type}
+        if node.weight_expr:
+            d["weight"] = ast_to_canonical_dict(node.weight_expr)
+        return d
+    elif isinstance(node, RemoveRelationshipNode):
+        return {"op": "REMOVE_RELATIONSHIP", "source": node.source_var, "target": node.target_var, "rel_type": node.rel_type}
+    elif isinstance(node, ScheduleEventNode):
+        d = {"op": "SCHEDULE_EVENT", "event_type": node.event_type, "delay_ticks": node.delay_ticks}
+        if node.payload_expr:
+            d["payload"] = {k: ast_to_canonical_dict(v) for k, v in sorted(node.payload_expr.items())}
+        return d
+    elif isinstance(node, IfNode):
+        return {
+            "op": "IF",
+            "condition": ast_to_canonical_dict(node.condition),
+            "then": [ast_to_canonical_dict(e) for e in node.then_effects],
+            "else": [ast_to_canonical_dict(e) for e in node.else_effects],
+        }
+    elif isinstance(node, ForEachNode):
+        return {
+            "op": "FOR_EACH",
+            "iterator_var": node.iterator_var,
+            "collection_source": node.collection_source,
+            "rel_type": node.rel_type,
+            "body": [ast_to_canonical_dict(e) for e in node.body],
+        }
+    return node
+
+
+def rule_to_canonical_dict(rule: RuleDefinition) -> Dict[str, Any]:
+    """Serialize full canonical rule body including all AST nodes and conditions."""
+    d: Dict[str, Any] = {
+        "rule_id": rule.rule_id,
+        "name": rule.name,
+        "version": rule.version,
+        "priority": rule.priority,
+        "active_from_tick": str(rule.active_from_tick),
+        "preconditions": [ast_to_canonical_dict(p) for p in rule.preconditions],
+        "effects": [ast_to_canonical_dict(e) for e in rule.effects],
+    }
+    if rule.target_selector:
+        sel: Dict[str, Any] = {
+            "entity_type": rule.target_selector.entity_type,
+            "limit": rule.target_selector.limit,
+        }
+        if rule.target_selector.filter_expr:
+            sel["filter"] = ast_to_canonical_dict(rule.target_selector.filter_expr)
+        d["target_selector"] = sel
+    return d

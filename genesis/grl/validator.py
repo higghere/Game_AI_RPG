@@ -9,7 +9,14 @@ from typing import List
 
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
 from genesis.core.errors import GRLStructuralValidationError, GRLValidationError
-from genesis.grl.ast import ForEachNode, GRLNode, IfNode, RuleDefinition
+from genesis.grl.ast import (
+    AggregateNode,
+    FindEntityNode,
+    ForEachNode,
+    GRLNode,
+    IfNode,
+    RuleDefinition,
+)
 
 
 class GRLValidator:
@@ -31,6 +38,11 @@ class GRLValidator:
         self._check_for_recursion(rule.effects)
         for pre in rule.preconditions:
             self._check_node_recursion(pre)
+
+        # 3. Check AST bounds / ceilings
+        self._validate_node_bounds(rule.effects)
+        for pre in rule.preconditions:
+            self._validate_node_bounds([pre])
 
     def _calculate_max_loop_depth(self, nodes: List[GRLNode], current_depth: int) -> int:
         """Recursively compute maximum loop nesting depth in an AST node list."""
@@ -64,3 +76,29 @@ class GRLValidator:
                 self._check_node_recursion(child)
             for child in node.else_effects:
                 self._check_node_recursion(child)
+
+    def _validate_node_bounds(self, nodes: List[GRLNode]) -> None:
+        """Verify that ceilings on iterations, scans, and elements are strictly observed."""
+        for node in nodes:
+            if isinstance(node, ForEachNode):
+                if node.max_iterations < 1 or node.max_iterations > 32:
+                    raise GRLValidationError(f"FOR_EACH max_iterations {node.max_iterations} exceeds ceiling of 32")
+                self._validate_node_bounds(node.body)
+            elif isinstance(node, FindEntityNode):
+                if node.max_scan < 1 or node.max_scan > 16:
+                    raise GRLValidationError(f"FIND_ENTITY max_scan {node.max_scan} exceeds ceiling of 16")
+                if node.limit < 1 or node.limit > 16:
+                    raise GRLValidationError(f"FIND_ENTITY limit {node.limit} exceeds ceiling of 16")
+                if node.filter_expr:
+                    self._validate_node_bounds([node.filter_expr])
+            elif isinstance(node, AggregateNode):
+                if node.max_elements < 1 or node.max_elements > 32:
+                    raise GRLValidationError(f"AGGREGATE max_elements {node.max_elements} exceeds ceiling of 32")
+                if node.expr:
+                    self._validate_node_bounds([node.expr])
+                if node.filter_expr:
+                    self._validate_node_bounds([node.filter_expr])
+            elif isinstance(node, IfNode):
+                self._validate_node_bounds([node.condition])
+                self._validate_node_bounds(node.then_effects)
+                self._validate_node_bounds(node.else_effects)

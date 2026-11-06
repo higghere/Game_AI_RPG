@@ -55,6 +55,31 @@ class UnaryOpNode(GRLNode):
     operand: GRLNode
 
 
+@dataclass
+class RandomIntNode(GRLNode):
+    min_val: int
+    max_val: int
+
+
+@dataclass
+class RandomFixedNode(GRLNode):
+    min_val: FixedPoint
+    max_val: FixedPoint
+
+
+@dataclass
+class AggregateNode(GRLNode):
+    aggregate_func: str  # COUNT, SUM, MIN, MAX
+    collection_source: str  # cell_entities, outgoing_relationships, incoming_relationships
+    rel_type: Optional[str] = None
+    entity_type: Optional[str] = None
+    element_var: str = "item"
+    expr: Optional[GRLNode] = None
+    filter_expr: Optional[GRLNode] = None
+    max_elements: int = 32
+    result_var: Optional[str] = None
+
+
 # Effects / Statements
 @dataclass
 class SetPropertyNode(GRLNode):
@@ -121,9 +146,35 @@ class IfNode(GRLNode):
 @dataclass
 class ForEachNode(GRLNode):
     iterator_var: str
-    collection_source: str  # e.g. "outgoing_relationships", "incoming_relationships"
+    collection_source: str  # e.g. "outgoing_relationships", "incoming_relationships", "cell_entities"
     rel_type: Optional[str] = None
+    max_iterations: int = 32
     body: List[GRLNode] = field(default_factory=list)
+
+
+@dataclass
+class CreateEntityNode(GRLNode):
+    entity_type: str
+    result_var: str
+    initial_properties: Dict[str, GRLNode] = field(default_factory=dict)
+
+
+@dataclass
+class DestroyEntityNode(GRLNode):
+    entity_var: str
+
+
+@dataclass
+class FindEntityNode(GRLNode):
+    result_var: str
+    collection_source: str  # cell_entities, outgoing_relationships, incoming_relationships
+    entity_type: Optional[str] = None
+    rel_type: Optional[str] = None
+    filter_expr: Optional[GRLNode] = None
+    order_by: Optional[str] = None
+    order_direction: str = "ASC"  # ASC, DESC
+    max_scan: int = 16
+    limit: int = 1
 
 
 # Rule Structure
@@ -146,6 +197,7 @@ class RuleDefinition:
     effects: List[GRLNode] = field(default_factory=list)
     active_from_tick: int = 0
     spatial_partitioned: bool = False
+    author: str = ""
 
 
 def ast_to_canonical_dict(node: Any) -> Any:
@@ -196,14 +248,78 @@ def ast_to_canonical_dict(node: Any) -> Any:
             "then": [ast_to_canonical_dict(e) for e in node.then_effects],
             "else": [ast_to_canonical_dict(e) for e in node.else_effects],
         }
-    elif isinstance(node, ForEachNode):
+    elif isinstance(node, RandomIntNode):
         return {
+            "op": "RANDOM_INT",
+            "min": str(node.min_val),
+            "max": str(node.max_val),
+        }
+    elif isinstance(node, RandomFixedNode):
+        return {
+            "op": "RANDOM_FIXED",
+            "min": node.min_val.to_decimal_string(),
+            "max": node.max_val.to_decimal_string(),
+        }
+    elif isinstance(node, AggregateNode):
+        d = {
+            "op": "AGGREGATE",
+            "aggregate_func": node.aggregate_func,
+            "collection_source": node.collection_source,
+            "element_var": node.element_var,
+            "max_elements": node.max_elements,
+        }
+        if node.rel_type is not None:
+            d["rel_type"] = node.rel_type
+        if node.entity_type is not None:
+            d["entity_type"] = node.entity_type
+        if node.result_var is not None:
+            d["result_var"] = node.result_var
+        if node.expr is not None:
+            d["expr"] = ast_to_canonical_dict(node.expr)
+        if node.filter_expr is not None:
+            d["filter"] = ast_to_canonical_dict(node.filter_expr)
+        return d
+    elif isinstance(node, CreateEntityNode):
+        return {
+            "op": "CREATE_ENTITY",
+            "entity_type": node.entity_type,
+            "result_var": node.result_var,
+            "initial_properties": {k: ast_to_canonical_dict(v) for k, v in sorted(node.initial_properties.items())},
+        }
+    elif isinstance(node, DestroyEntityNode):
+        return {
+            "op": "DESTROY_ENTITY",
+            "entity": node.entity_var,
+        }
+    elif isinstance(node, FindEntityNode):
+        d = {
+            "op": "FIND_ENTITY",
+            "result_var": node.result_var,
+            "collection_source": node.collection_source,
+            "order_direction": node.order_direction,
+            "max_scan": node.max_scan,
+            "limit": node.limit,
+        }
+        if node.entity_type is not None:
+            d["entity_type"] = node.entity_type
+        if node.rel_type is not None:
+            d["rel_type"] = node.rel_type
+        if node.order_by is not None:
+            d["order_by"] = node.order_by
+        if node.filter_expr is not None:
+            d["filter"] = ast_to_canonical_dict(node.filter_expr)
+        return d
+    elif isinstance(node, ForEachNode):
+        d = {
             "op": "FOR_EACH",
             "iterator_var": node.iterator_var,
             "collection_source": node.collection_source,
-            "rel_type": node.rel_type,
+            "max_iterations": node.max_iterations,
             "body": [ast_to_canonical_dict(e) for e in node.body],
         }
+        if node.rel_type is not None:
+            d["rel_type"] = node.rel_type
+        return d
     return node
 
 
@@ -218,6 +334,8 @@ def rule_to_canonical_dict(rule: RuleDefinition) -> Dict[str, Any]:
         "preconditions": [ast_to_canonical_dict(p) for p in rule.preconditions],
         "effects": [ast_to_canonical_dict(e) for e in rule.effects],
     }
+    if rule.author:
+        d["author"] = rule.author
     if rule.spatial_partitioned:
         d["spatial_partitioned"] = True
     if rule.target_selector:

@@ -104,10 +104,29 @@ class RelationshipGraph:
             del self._edges[key]
             if source_id in self._out_index and (target_id, rel_type) in self._out_index[source_id]:
                 del self._out_index[source_id][(target_id, rel_type)]
+                if not self._out_index[source_id]:
+                    del self._out_index[source_id]
             if target_id in self._in_index and (source_id, rel_type) in self._in_index[target_id]:
                 del self._in_index[target_id][(source_id, rel_type)]
+                if not self._in_index[target_id]:
+                    del self._in_index[target_id]
             return True
         return False
+
+    def remove_all_edges_for(self, entity_id: int) -> int:
+        """Remove all incoming and outgoing edges for an entity. Returns count of removed edges."""
+        edges_to_remove = []
+        if entity_id in self._out_index:
+            for (target_id, rel_type) in list(self._out_index[entity_id].keys()):
+                edges_to_remove.append((entity_id, target_id, rel_type))
+        if entity_id in self._in_index:
+            for (source_id, rel_type) in list(self._in_index[entity_id].keys()):
+                edges_to_remove.append((source_id, entity_id, rel_type))
+        count = 0
+        for s_id, t_id, r_type in set(edges_to_remove):
+            if self.remove_edge(s_id, t_id, r_type):
+                count += 1
+        return count
 
     def has_edge(self, source_id: int, target_id: int, rel_type: str) -> bool:
         return (source_id, target_id, rel_type) in self._edges
@@ -152,3 +171,65 @@ class RelationshipGraph:
             edge = RelationshipEdge.from_dict(edata)
             graph.add_edge(edge.source_id, edge.target_id, edge.rel_type, edge.weight, edge.properties)
         return graph
+
+
+class RelationshipKindDefinition:
+    """Schema definition for a relationship kind loaded from data declarations."""
+
+    def __init__(
+        self,
+        rel_type: str,
+        directed: bool = True,
+        description: str = "",
+        symmetric: bool = False,
+    ) -> None:
+        self.rel_type = rel_type
+        self.directed = directed
+        self.description = description
+        self.symmetric = symmetric
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "rel_type": self.rel_type,
+            "directed": self.directed,
+            "description": self.description,
+            "symmetric": self.symmetric,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> RelationshipKindDefinition:
+        return cls(
+            rel_type=data["rel_type"],
+            directed=bool(data.get("directed", True)),
+            description=data.get("description", ""),
+            symmetric=bool(data.get("symmetric", False)),
+        )
+
+
+class RelationshipKindRegistry:
+    """Registry of relationship kinds loaded from data definitions."""
+
+    def __init__(self) -> None:
+        self._kinds: Dict[str, RelationshipKindDefinition] = {}
+
+    def register_kind(self, kind: RelationshipKindDefinition) -> None:
+        self._kinds[kind.rel_type] = kind
+
+    def get_kind(self, rel_type: str) -> Optional[RelationshipKindDefinition]:
+        return self._kinds.get(rel_type)
+
+    def has_kind(self, rel_type: str) -> bool:
+        return rel_type in self._kinds
+
+    def all_kinds(self) -> List[RelationshipKindDefinition]:
+        return [self._kinds[k] for k in sorted(self._kinds.keys())]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: self._kinds[k].to_dict() for k in sorted(self._kinds.keys())}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> RelationshipKindRegistry:
+        reg = cls()
+        for k, v in data.items():
+            reg.register_kind(RelationshipKindDefinition.from_dict(v))
+        return reg

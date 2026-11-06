@@ -6,7 +6,7 @@ and atomic single-rule rollback on failure or quota overflow.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from genesis.core.arithmetic import FixedPoint, check_int64, half_even_div, half_even_mod
 from genesis.core.config import DEFAULT_CONFIG, RuntimeConfig
@@ -21,8 +21,12 @@ from genesis.core.errors import (
 from genesis.grl.ast import (
     AddRelationshipNode,
     AdjustPropertyNode,
+    AggregateNode,
     BinaryOpNode,
     ConsumeResourceNode,
+    CreateEntityNode,
+    DestroyEntityNode,
+    FindEntityNode,
     ForEachNode,
     GetPropertyNode,
     GetResourceNode,
@@ -31,6 +35,8 @@ from genesis.grl.ast import (
     IfNode,
     LiteralNode,
     ProduceResourceNode,
+    RandomFixedNode,
+    RandomIntNode,
     RemoveRelationshipNode,
     RuleDefinition,
     ScheduleEventNode,
@@ -60,15 +66,36 @@ class ExecutionContext:
         "staged_added_edges",
         "staged_removed_edges",
         "staged_events",
+        "staged_created_entities",
+        "staged_destroyed_entities",
+        "initial_rng_state",
+        "initial_entities_next_id",
     )
 
-    def __init__(self, rule_id: str, config: RuntimeConfig = DEFAULT_CONFIG) -> None:
+    def __init__(
+        self,
+        rule_id: str,
+        world_or_config: Optional[Union[WorldState, RuntimeConfig]] = None,
+        config: Optional[RuntimeConfig] = None,
+    ) -> None:
         self.rule_id = rule_id
         self.operations_count = 0
-        self.max_operations = config.max_operations_per_rule
+
+        world: Optional[WorldState] = None
+        cfg: RuntimeConfig = DEFAULT_CONFIG
+
+        if isinstance(world_or_config, WorldState):
+            world = world_or_config
+            cfg = config or DEFAULT_CONFIG
+        elif isinstance(world_or_config, RuntimeConfig):
+            cfg = world_or_config
+        elif config is not None:
+            cfg = config
+
+        self.max_operations = cfg.max_operations_per_rule
         self.touched_entities: Set[int] = set()
         self.new_world_touches: int = 0
-        self.max_touched_entities = config.max_entities_touched_per_tick
+        self.max_touched_entities = cfg.max_entities_touched_per_tick
         self.variables: Dict[str, Any] = {}
 
         # Transactional staging buffers (single-rule rollback)
@@ -77,6 +104,16 @@ class ExecutionContext:
         self.staged_added_edges: List[RelationshipEdge] = []
         self.staged_removed_edges: List[Tuple[int, int, str]] = []
         self.staged_events: List[EventRecord] = []
+        self.staged_created_entities: List[Entity] = []
+        self.staged_destroyed_entities: List[int] = []
+
+        # Substrate snapshots for rollback atomicity
+        if world is not None:
+            self.initial_rng_state = world.rng.get_state()
+            self.initial_entities_next_id = world.entities._next_id
+        else:
+            self.initial_rng_state = {}
+            self.initial_entities_next_id = 1
 
     def consume_op(self) -> None:
         """Consume 1 operation budget credit."""
@@ -119,15 +156,13 @@ class GRLInterpreter:
         with a fresh per-cell operation budget.
         """
         invocation_id = f"{rule.rule_id}@{cell[0]},{cell[1]}" if cell is not None else rule.rule_id
-        ctx = ExecutionContext(invocation_id, self.config)
+        ctx = ExecutionContext(invocation_id, world, self.config)
         if cell is not None:
             ctx.variables["current_cell_x"] = cell[0]
             ctx.variables["current_cell_y"] = cell[1]
 
         try:
             # 1. Global Preconditions Gate
-            # Evaluated once at rule level before touching any target entities.
-            # If any global precondition fails, rule exits immediately without touching entities.
             for pre in rule.preconditions:
                 ctx.consume_op()
                 if not self.eval_expression(pre, ctx, world):
@@ -140,7 +175,7 @@ class GRLInterpreter:
                 target_cell = cell if cell is not None else sel.spatial_cell
 
                 if target_cell is not None:
-                    # Spatial lookup through substrate: O(1) cell lookup!
+                    # Spatial lookup through substrate: O(1) cell lookup
                     cell_entity_ids = world.spatial_index.get_entities_in_cell(target_cell[0], target_cell[1])
                     entities_to_evaluate: List[Entity] = []
                     for eid in cell_entity_ids:
@@ -179,11 +214,10 @@ class GRLInterpreter:
                     self.eval_effect(effect, ctx, world)
 
             # 4. Commit staged transactions atomically
-            self._commit_transactions(ctx, world, defer_spatial_sync=defer_spatial_sync)
+            self._commit_transactions(ctx, world, defer_spatial_sync=defer_spatial_sync, rule_priority=rule.priority)
             world.entities_touched_this_tick.update(ctx.touched_entities)
 
-            # Record success event in journal: in TRACE mode, record individually;
-            # in SUMMARY / MINIMAL mode, accumulate for tick_digest
+            # Record success event in journal
             if world.audit_level == "TRACE":
                 success_event = EventRecord(
                     tick=world.clock.current_tick,
@@ -205,6 +239,16 @@ class GRLInterpreter:
 
         except GenesisError as exc:
             # Single-rule rollback for domain errors (quota exceeded, schema violation, etc.)
+            if ctx.initial_rng_state:
+                world.rng.set_state(ctx.initial_rng_state)
+            world.entities._next_id = ctx.initial_entities_next_id
+
+            # Restore any entities marked inactive during this rule
+            for eid in ctx.staged_destroyed_entities:
+                ent = world.entities.get_entity(eid)
+                if ent:
+                    ent.is_active = True
+
             world.entities_touched_this_tick.update(ctx.touched_entities)
             failure_event = EventRecord(
                 tick=world.clock.current_tick,
@@ -224,7 +268,15 @@ class GRLInterpreter:
             return False, f"{type(exc).__name__}: {str(exc)}"
 
         except Exception as exc:
-            # Unexpected system / host / programming error: do not silently swallow
+            # Unexpected system / host / programming error
+            if ctx.initial_rng_state:
+                world.rng.set_state(ctx.initial_rng_state)
+            world.entities._next_id = ctx.initial_entities_next_id
+            for eid in ctx.staged_destroyed_entities:
+                ent = world.entities.get_entity(eid)
+                if ent:
+                    ent.is_active = True
+
             internal_event = EventRecord(
                 tick=world.clock.current_tick,
                 phase=PHASE_GRL_RULES,
@@ -252,8 +304,14 @@ class GRLInterpreter:
 
         elif isinstance(node, GetPropertyNode):
             ent = ctx.variables.get(node.entity_var)
+            if ent is None:
+                if node.property_name == "id":
+                    return 0
+                return None
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Variable '{node.entity_var}' is not an Entity")
+            if not ent.is_active:
+                raise GRLExecutionError(f"Cannot access property '{node.property_name}' on inactive/destroyed entity {ent.id}")
             ctx.touch_entity(ent.id, world)
 
             # Check staged properties first
@@ -277,6 +335,21 @@ class GRLInterpreter:
             ctx.touch_entity(src_id, world)
             ctx.touch_entity(tgt_id, world)
             return world.relationships.has_edge(src_id, tgt_id, node.rel_type)
+
+        elif isinstance(node, RandomIntNode):
+            return world.rng.next_int_range(node.min_val, node.max_val)
+
+        elif isinstance(node, RandomFixedNode):
+            min_raw = node.min_val.raw_value
+            max_raw = node.max_val.raw_value
+            range_raw = max_raw - min_raw
+            if range_raw == 0:
+                return node.min_val
+            draw = world.rng.next_int_range(0, range_raw)
+            return FixedPoint.from_raw(min_raw + draw)
+
+        elif isinstance(node, AggregateNode):
+            return self._eval_aggregate(node, ctx, world)
 
         elif isinstance(node, BinaryOpNode):
             left_val = self.eval_expression(node.left, ctx, world)
@@ -352,9 +425,10 @@ class GRLInterpreter:
             ent = ctx.variables.get(node.entity_var)
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Cannot set property on non-entity '{node.entity_var}'")
+            if not ent.is_active:
+                raise GRLExecutionError(f"Cannot set property on inactive/destroyed entity {ent.id}")
             ctx.touch_entity(ent.id, world)
             new_val = self.eval_expression(node.value_expr, ctx, world)
-            # Schema validation
             schema = world.schema_registry.get_schema(ent.entity_type)
             if schema:
                 new_val = schema.validate_property(node.property_name, new_val)
@@ -364,6 +438,8 @@ class GRLInterpreter:
             ent = ctx.variables.get(node.entity_var)
             if not isinstance(ent, Entity):
                 raise GRLExecutionError(f"Cannot adjust property on non-entity '{node.entity_var}'")
+            if not ent.is_active:
+                raise GRLExecutionError(f"Cannot adjust property on inactive/destroyed entity {ent.id}")
             ctx.touch_entity(ent.id, world)
             delta = self.eval_expression(node.delta_expr, ctx, world)
             staged_key = (ent.id, node.property_name)
@@ -385,7 +461,6 @@ class GRLInterpreter:
                 raise GRLExecutionError(f"Resource pool '{node.pool_name}' does not exist")
             current_delta = ctx.staged_resources.get(node.pool_name, FixedPoint.from_int(0))
             new_delta = current_delta - amount
-            # Validate underflow against staged balance
             if pool.balance + new_delta < pool.min_capacity:
                 raise GRLExecutionError(f"Resource underflow on '{node.pool_name}'")
             ctx.staged_resources[node.pool_name] = new_delta
@@ -411,12 +486,10 @@ class GRLInterpreter:
             to_pool = world.resources.get_pool(node.to_pool)
             if not from_pool or not to_pool:
                 raise GRLExecutionError(f"Invalid pool transfer: '{node.from_pool}' -> '{node.to_pool}'")
-            # Deduct from source
             f_delta = ctx.staged_resources.get(node.from_pool, FixedPoint.from_int(0)) - amount
             if from_pool.balance + f_delta < from_pool.min_capacity:
                 raise GRLExecutionError(f"Transfer underflow on '{node.from_pool}'")
             ctx.staged_resources[node.from_pool] = f_delta
-            # Add to target
             t_delta = ctx.staged_resources.get(node.to_pool, FixedPoint.from_int(0)) + amount
             if to_pool.balance + t_delta > to_pool.max_capacity:
                 raise GRLExecutionError(f"Transfer overflow on '{node.to_pool}'")
@@ -467,31 +540,315 @@ class GRLInterpreter:
                     self.eval_effect(child, ctx, world)
 
         elif isinstance(node, ForEachNode):
-            # Deterministic iteration over edges
-            parent_ent = ctx.variables.get("target")
-            if not isinstance(parent_ent, Entity):
-                return
-            edges = world.relationships.get_outgoing(parent_ent.id, node.rel_type)
-            for edge in edges:
+            source_ent = ctx.variables.get("target")
+            entities_to_iterate: List[Entity] = []
+
+            if node.collection_source == "incoming_relationships" and isinstance(source_ent, Entity):
+                edges = world.relationships.get_incoming(source_ent.id, node.rel_type)
+                for edge in edges[:node.max_iterations]:
+                    src_ent = world.entities.get_entity(edge.source_id)
+                    if src_ent and src_ent.is_active:
+                        entities_to_iterate.append(src_ent)
+            elif node.collection_source in ("outgoing_relationships", "relationships") and isinstance(source_ent, Entity):
+                edges = world.relationships.get_outgoing(source_ent.id, node.rel_type)
+                for edge in edges[:node.max_iterations]:
+                    tgt_ent = world.entities.get_entity(edge.target_id)
+                    if tgt_ent and tgt_ent.is_active:
+                        entities_to_iterate.append(tgt_ent)
+            elif node.collection_source == "cell_entities":
+                cx = ctx.variables.get("current_cell_x")
+                cy = ctx.variables.get("current_cell_y")
+                if cx is None or cy is None:
+                    if isinstance(source_ent, Entity):
+                        cx = source_ent.get_property("cell_x") or 0
+                        cy = source_ent.get_property("cell_y") or 0
+                    else:
+                        cx, cy = 0, 0
+                eids = world.spatial_index.get_entities_in_cell(int(cx), int(cy))
+                for eid in eids[:node.max_iterations]:
+                    ent = world.entities.get_entity(eid)
+                    if ent and ent.is_active:
+                        entities_to_iterate.append(ent)
+
+            for member in entities_to_iterate:
+                ctx.consume_op()  # Step cost per iteration
+                ctx.touch_entity(member.id, world)
+                ctx.variables[node.iterator_var] = member
+                for child in node.body:
+                    self.eval_effect(child, ctx, world)
+
+        elif isinstance(node, CreateEntityNode):
+            # 5 base ops: 1 consumed in eval_effect, consume remaining 4
+            for _ in range(4):
                 ctx.consume_op()
-                tgt_ent = world.entities.get_entity(edge.target_id)
-                if tgt_ent:
-                    ctx.touch_entity(tgt_ent.id, world)
-                    ctx.variables[node.iterator_var] = tgt_ent
-                    for child in node.body:
-                        self.eval_effect(child, ctx, world)
+
+            schema = world.schema_registry.get_schema(node.entity_type)
+            if not schema:
+                raise GRLExecutionError(f"Cannot create entity: schema '{node.entity_type}' not found")
+
+            # Evaluate initial properties in sorted key order
+            evaluated_props: Dict[str, Any] = {}
+            for prop_name in sorted(node.initial_properties.keys()):
+                prop_expr = node.initial_properties[prop_name]
+                val = self.eval_expression(prop_expr, ctx, world)
+                val = schema.validate_property(prop_name, val)
+                evaluated_props[prop_name] = val
+
+            new_id = world.entities._next_id
+            world.entities._next_id = check_int64(world.entities._next_id + 1)
+
+            new_ent = Entity(
+                entity_id=new_id,
+                entity_type=node.entity_type,
+                created_tick=world.clock.current_tick,
+                properties=evaluated_props,
+                is_active=True,
+            )
+            ctx.staged_created_entities.append(new_ent)
+            ctx.touch_entity(new_id, world)
+            ctx.variables[node.result_var] = new_ent
+
+        elif isinstance(node, DestroyEntityNode):
+            # 3 base ops: 1 consumed in eval_effect, consume remaining 2
+            for _ in range(2):
+                ctx.consume_op()
+
+            ent = ctx.variables.get(node.entity_var)
+            if not isinstance(ent, Entity):
+                raise GRLExecutionError(f"Cannot destroy non-entity '{node.entity_var}'")
+
+            ctx.touch_entity(ent.id, world)
+
+            # Purge edge metering: 1 op per incident edge
+            out_edges = world.relationships.get_outgoing(ent.id)
+            in_edges = world.relationships.get_incoming(ent.id)
+            total_edges = len(out_edges) + len(in_edges)
+            for _ in range(total_edges):
+                ctx.consume_op()
+
+            # Mark entity inactive in-place for single-rule lifetime
+            ent.is_active = False
+            ctx.staged_destroyed_entities.append(ent.id)
+
+        elif isinstance(node, FindEntityNode):
+            candidates: List[Entity] = []
+
+            if node.collection_source == "cell_entities":
+                cx = ctx.variables.get("current_cell_x")
+                cy = ctx.variables.get("current_cell_y")
+                if cx is None or cy is None:
+                    target = ctx.variables.get("target")
+                    if isinstance(target, Entity):
+                        cx = target.get_property("cell_x") or 0
+                        cy = target.get_property("cell_y") or 0
+                    else:
+                        cx, cy = 0, 0
+                eids = world.spatial_index.get_entities_in_cell(int(cx), int(cy))
+                for eid in eids:
+                    ent = world.entities.get_entity(eid)
+                    if ent and ent.is_active:
+                        if node.entity_type is None or ent.entity_type == node.entity_type:
+                            candidates.append(ent)
+                            if len(candidates) >= node.max_scan:
+                                break
+
+            elif node.collection_source in ("outgoing_relationships", "relationships"):
+                target_ent = ctx.variables.get("target")
+                if isinstance(target_ent, Entity):
+                    edges = world.relationships.get_outgoing(target_ent.id, node.rel_type)
+                    for edge in edges:
+                        ent = world.entities.get_entity(edge.target_id)
+                        if ent and ent.is_active:
+                            if node.entity_type is None or ent.entity_type == node.entity_type:
+                                candidates.append(ent)
+                                if len(candidates) >= node.max_scan:
+                                    break
+
+            elif node.collection_source == "incoming_relationships":
+                target_ent = ctx.variables.get("target")
+                if isinstance(target_ent, Entity):
+                    edges = world.relationships.get_incoming(target_ent.id, node.rel_type)
+                    for edge in edges:
+                        ent = world.entities.get_entity(edge.source_id)
+                        if ent and ent.is_active:
+                            if node.entity_type is None or ent.entity_type == node.entity_type:
+                                candidates.append(ent)
+                                if len(candidates) >= node.max_scan:
+                                    break
+
+            # Evaluate filter on each candidate
+            matched_candidates: List[Entity] = []
+            for cand in candidates:
+                ctx.touch_entity(cand.id, world)
+                ctx.consume_op()  # Candidate inspection cost
+
+                if node.filter_expr is not None:
+                    ctx.variables["candidate"] = cand
+                    is_match = self.eval_expression(node.filter_expr, ctx, world)
+                    if is_match:
+                        matched_candidates.append(cand)
+                        if node.order_by is None and len(matched_candidates) >= node.limit:
+                            break
+                else:
+                    matched_candidates.append(cand)
+                    if node.order_by is None and len(matched_candidates) >= node.limit:
+                        break
+
+            # Deterministic sorting if order_by specified
+            if node.order_by is not None and matched_candidates:
+                # Stable sort: tie-break by ID ASC, then primary sort by property
+                matched_candidates.sort(key=lambda c: c.id)
+                matched_candidates.sort(
+                    key=lambda c: c.get_property(node.order_by) or 0,
+                    reverse=(node.order_direction.upper() == "DESC")
+                )
+
+            if matched_candidates:
+                ctx.variables[node.result_var] = matched_candidates[0]
+            else:
+                ctx.variables[node.result_var] = None
+
+        elif isinstance(node, AggregateNode):
+            self._eval_aggregate(node, ctx, world)
 
         else:
             raise GRLExecutionError(f"Unsupported effect node: {type(node).__name__}")
+
+    def _eval_aggregate(self, node: AggregateNode, ctx: ExecutionContext, world: WorldState) -> Any:
+        """Evaluate bounded AGGREGATE node over spatial cell or relationship neighborhood."""
+        candidates: List[Entity] = []
+
+        if node.collection_source == "cell_entities":
+            cx = ctx.variables.get("current_cell_x")
+            cy = ctx.variables.get("current_cell_y")
+            if cx is None or cy is None:
+                target = ctx.variables.get("target")
+                if isinstance(target, Entity):
+                    cx = target.get_property("cell_x") or 0
+                    cy = target.get_property("cell_y") or 0
+                else:
+                    cx, cy = 0, 0
+            eids = world.spatial_index.get_entities_in_cell(int(cx), int(cy))
+            for eid in eids:
+                ent = world.entities.get_entity(eid)
+                if ent and ent.is_active:
+                    if node.entity_type is None or ent.entity_type == node.entity_type:
+                        candidates.append(ent)
+                        if len(candidates) >= node.max_elements:
+                            break
+
+        elif node.collection_source in ("outgoing_relationships", "relationships"):
+            target_ent = ctx.variables.get("target")
+            if isinstance(target_ent, Entity):
+                edges = world.relationships.get_outgoing(target_ent.id, node.rel_type)
+                for edge in edges:
+                    ent = world.entities.get_entity(edge.target_id)
+                    if ent and ent.is_active:
+                        if node.entity_type is None or ent.entity_type == node.entity_type:
+                            candidates.append(ent)
+                            if len(candidates) >= node.max_elements:
+                                break
+
+        elif node.collection_source == "incoming_relationships":
+            target_ent = ctx.variables.get("target")
+            if isinstance(target_ent, Entity):
+                edges = world.relationships.get_incoming(target_ent.id, node.rel_type)
+                for edge in edges:
+                    ent = world.entities.get_entity(edge.source_id)
+                    if ent and ent.is_active:
+                        if node.entity_type is None or ent.entity_type == node.entity_type:
+                            candidates.append(ent)
+                            if len(candidates) >= node.max_elements:
+                                break
+
+        func = node.aggregate_func
+        count = 0
+        total: Any = None
+        min_val: Any = None
+        max_val: Any = None
+
+        for elem in candidates:
+            ctx.touch_entity(elem.id, world)
+            ctx.consume_op()  # Element processing cost
+
+            ctx.variables[node.element_var] = elem
+
+            if node.filter_expr is not None:
+                if not self.eval_expression(node.filter_expr, ctx, world):
+                    continue
+
+            count += 1
+
+            if func in ("SUM", "MIN", "MAX"):
+                if node.expr is not None:
+                    val = self.eval_expression(node.expr, ctx, world)
+                else:
+                    val = FixedPoint.from_int(1)
+
+                if func == "SUM":
+                    if total is None:
+                        total = val
+                    else:
+                        total = total + val
+                elif func == "MIN":
+                    if min_val is None or val < min_val:
+                        min_val = val
+                elif func == "MAX":
+                    if max_val is None or val > max_val:
+                        max_val = val
+
+        if func == "COUNT":
+            result = count
+        elif func == "SUM":
+            result = total if total is not None else 0
+        elif func == "MIN":
+            result = min_val if min_val is not None else 0
+        elif func == "MAX":
+            result = max_val if max_val is not None else 0
+        else:
+            result = 0
+
+        if node.result_var:
+            ctx.variables[node.result_var] = result
+        return result
 
     def _commit_transactions(
         self,
         ctx: ExecutionContext,
         world: WorldState,
         defer_spatial_sync: bool = False,
+        rule_priority: int = 0,
     ) -> None:
         """Apply all staged mutations to WorldState."""
-        # 1. Properties
+        # 1. Created entities
+        for new_ent in ctx.staged_created_entities:
+            world.entities._entities[new_ent.id] = new_ent
+            world.entities._by_type.setdefault(new_ent.entity_type, []).append(new_ent.id)
+            cx = new_ent.get_property("cell_x")
+            cy = new_ent.get_property("cell_y")
+            if cx is None:
+                cx = new_ent.get_property("pos_x") or 0
+            if cy is None:
+                cy = new_ent.get_property("pos_y") or 0
+            world.spatial_index.place_entity(new_ent.id, int(cx), int(cy))
+
+            # Emit entity_created domain event
+            ev = EventRecord(
+                tick=world.clock.current_tick,
+                phase=PHASE_GRL_RULES,
+                priority=rule_priority,
+                sequence_id=world.next_sequence_id(),
+                event_type="entity_created",
+                payload={
+                    "entity_id": str(new_ent.id),
+                    "entity_type": new_ent.entity_type,
+                    "cell_x": str(int(cx)),
+                    "cell_y": str(int(cy)),
+                },
+            )
+            world.event_journal.append(ev)
+
+        # 2. Properties
         for (ent_id, prop_name), val in ctx.staged_properties.items():
             ent = world.entities.get_entity(ent_id)
             if ent:
@@ -502,13 +859,13 @@ class GRLInterpreter:
                     else:
                         world.sync_entity_spatial(ent.id)
 
-        # 2. Resources
+        # 3. Resources
         for pool_name, delta in ctx.staged_resources.items():
             pool = world.resources.get_pool(pool_name)
             if pool:
                 pool.set_balance(pool.balance + delta)
 
-        # 3. Relationships
+        # 4. Relationships
         for edge in ctx.staged_added_edges:
             world.relationships.add_edge(
                 edge.source_id, edge.target_id, edge.rel_type, edge.weight, edge.properties
@@ -516,7 +873,29 @@ class GRLInterpreter:
         for (s_id, t_id, r_type) in ctx.staged_removed_edges:
             world.relationships.remove_edge(s_id, t_id, r_type)
 
-        # 4. Events
+        # 5. Destroyed entities
+        for eid in ctx.staged_destroyed_entities:
+            ent = world.entities.get_entity(eid)
+            etype = ent.entity_type if ent else "unknown"
+            world.spatial_index.remove_entity(eid)
+            world.relationships.remove_all_edges_for(eid)
+            world.entities.destroy_entity(eid)
+
+            # Emit entity_destroyed domain event
+            ev = EventRecord(
+                tick=world.clock.current_tick,
+                phase=PHASE_GRL_RULES,
+                priority=rule_priority,
+                sequence_id=world.next_sequence_id(),
+                event_type="entity_destroyed",
+                payload={
+                    "entity_id": str(eid),
+                    "entity_type": etype,
+                },
+            )
+            world.event_journal.append(ev)
+
+        # 6. Events
         for ev in ctx.staged_events:
             world.event_queue._events.append(ev)
         world.event_queue._events.sort(key=lambda e: e.sort_key)

@@ -31,9 +31,13 @@ class Entity:
         self.is_active: bool = is_active
 
     def get_property(self, name: str) -> Any:
+        if name == "id":
+            return self.id
         return self.properties.get(name)
 
     def has_property(self, name: str) -> bool:
+        if name == "id":
+            return True
         return name in self.properties
 
     def set_property(self, name: str, value: Any) -> None:
@@ -132,6 +136,15 @@ class EntityStorage:
 
     def get_entity(self, entity_id: int) -> Optional[Entity]:
         return self._entities.get(entity_id)
+
+    def destroy_entity(self, entity_id: int) -> Optional[Entity]:
+        """Permanently remove an entity from storage."""
+        ent = self._entities.pop(entity_id, None)
+        if ent:
+            type_list = self._by_type.get(ent.entity_type)
+            if type_list and entity_id in type_list:
+                type_list.remove(entity_id)
+        return ent
 
     def get_entities_by_type(self, entity_type: str) -> List[Entity]:
         """Return active entities of the given type, deterministically sorted by ID."""

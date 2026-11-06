@@ -28,7 +28,7 @@ from genesis.substrate.events import (
     PHASE_RESOURCE_SETTLEMENT,
 )
 from genesis.substrate.properties import SchemaRegistry
-from genesis.substrate.relationships import RelationshipGraph
+from genesis.substrate.relationships import RelationshipGraph, RelationshipKindRegistry
 from genesis.substrate.resources import ResourceRegistry
 from genesis.substrate.spatial import SpatialGridIndex
 
@@ -55,6 +55,7 @@ class WorldState:
         self.schema_registry: SchemaRegistry = SchemaRegistry()
         self.entities: EntityStorage = EntityStorage()
         self.relationships: RelationshipGraph = RelationshipGraph()
+        self.relationship_kinds: RelationshipKindRegistry = RelationshipKindRegistry()
         self.resources: ResourceRegistry = ResourceRegistry()
         self.spatial_index: SpatialGridIndex = SpatialGridIndex()
         self._pending_spatial_entities: Set[int] = set()
@@ -235,9 +236,28 @@ class WorldState:
 
         return current_tick
 
+    def compute_substrate_hash(self) -> str:
+        """Compute canonical hash of simulation state excluding append-only event journal."""
+        from genesis.persistence.hasher import compute_canonical_hash
+        d = self.to_canonical_dict()
+        d.pop("event_journal", None)
+        d.pop("next_sequence_id", None)
+        return compute_canonical_hash(d)
+
+    def compute_state_hash(self, include_journal: bool = False) -> str:
+        """Compute SHA-256 hash of world state.
+
+        If include_journal is False (pure simulation state), excludes event journal.
+        If include_journal is True, includes append-only journal.
+        """
+        from genesis.persistence.hasher import compute_canonical_hash
+        if include_journal:
+            return compute_canonical_hash(self.to_canonical_dict())
+        return self.compute_substrate_hash()
+
     def to_canonical_dict(self) -> Dict[str, Any]:
         """Produce canonical serialized representation of full simulation state."""
-        return {
+        d: Dict[str, Any] = {
             "schema_version": self.config.schema_version,
             "runtime_version": self.config.runtime_version,
             "next_sequence_id": str(self._next_sequence_id),
@@ -253,6 +273,9 @@ class WorldState:
             "event_journal": self.event_journal.to_dict(),
             "rules": self.rule_registry.to_canonical_dict() if self.rule_registry else {},
         }
+        if self.relationship_kinds and self.relationship_kinds._kinds:
+            d["relationship_kinds"] = self.relationship_kinds.to_dict()
+        return d
 
     @classmethod
     def from_canonical_dict(
@@ -271,6 +294,8 @@ class WorldState:
         ws.audit_level = data.get("audit_level", ws.config.audit_level)
         ws.entities = EntityStorage.from_dict(data["entities"])
         ws.relationships = RelationshipGraph.from_dict(data["relationships"])
+        if "relationship_kinds" in data and data["relationship_kinds"]:
+            ws.relationship_kinds = RelationshipKindRegistry.from_dict(data["relationship_kinds"])
         ws.resources = ResourceRegistry.from_dict(data["resources"])
         if "spatial_index" in data:
             ws.spatial_index = SpatialGridIndex.from_dict(data["spatial_index"])

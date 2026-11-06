@@ -11,8 +11,12 @@ from genesis.core.arithmetic import FixedPoint
 from genesis.grl.ast import (
     AddRelationshipNode,
     AdjustPropertyNode,
+    AggregateNode,
     BinaryOpNode,
     ConsumeResourceNode,
+    CreateEntityNode,
+    DestroyEntityNode,
+    FindEntityNode,
     ForEachNode,
     GetPropertyNode,
     GetResourceNode,
@@ -21,6 +25,8 @@ from genesis.grl.ast import (
     IfNode,
     LiteralNode,
     ProduceResourceNode,
+    RandomFixedNode,
+    RandomIntNode,
     RemoveRelationshipNode,
     RuleDefinition,
     ScheduleEventNode,
@@ -35,7 +41,8 @@ class GRLSerializer:
 
     def format_rule(self, rule: RuleDefinition) -> str:
         lines: List[str] = []
-        lines.append(f"RULE {rule.rule_id} [v{rule.version}, Priority: {rule.priority}]")
+        author_str = f' (Author: "{rule.author}")' if rule.author else ""
+        lines.append(f"RULE {rule.rule_id} [v{rule.version}, Priority: {rule.priority}{author_str}]")
         lines.append(f'  NAME: "{rule.name}"')
 
         if rule.target_selector:
@@ -66,6 +73,12 @@ class GRLSerializer:
             return f'world.resource("{node.pool_name}")'
         elif isinstance(node, HasRelationshipNode):
             return f'world.has_relationship({node.source_var}, {node.target_var}, "{node.rel_type}")'
+        elif isinstance(node, RandomIntNode):
+            return f"RANDOM_INT({node.min_val}, {node.max_val})"
+        elif isinstance(node, RandomFixedNode):
+            return f"RANDOM_FIXED({node.min_val.to_decimal_string()}, {node.max_val.to_decimal_string()})"
+        elif isinstance(node, AggregateNode):
+            return f"AGGREGATE_{node.aggregate_func}({node.collection_source}, max={node.max_elements})"
         elif isinstance(node, BinaryOpNode):
             left_str = self.format_expression(node.left)
             right_str = self.format_expression(node.right)
@@ -108,8 +121,16 @@ class GRLSerializer:
                     lines.append(self.format_effect(child, indent + 1))
             return "\n".join(lines)
         elif isinstance(node, ForEachNode):
-            lines = [f"{ind}FOR EACH {node.iterator_var} IN {node.collection_source}:"]
+            lines = [f"{ind}FOR EACH {node.iterator_var} IN {node.collection_source} (max={node.max_iterations}):"]
             for child in node.body:
                 lines.append(self.format_effect(child, indent + 1))
             return "\n".join(lines)
+        elif isinstance(node, CreateEntityNode):
+            return f'{ind}{node.result_var} = CREATE_ENTITY("{node.entity_type}")'
+        elif isinstance(node, DestroyEntityNode):
+            return f'{ind}DESTROY_ENTITY({node.entity_var})'
+        elif isinstance(node, FindEntityNode):
+            return f'{ind}{node.result_var} = FIND_ENTITY({node.collection_source}, max_scan={node.max_scan})'
+        elif isinstance(node, AggregateNode):
+            return f'{ind}{node.result_var} = AGGREGATE_{node.aggregate_func}({node.collection_source})'
         return f"{ind}<{type(node).__name__}>"

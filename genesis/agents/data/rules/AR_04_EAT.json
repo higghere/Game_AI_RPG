@@ -1,0 +1,496 @@
+{
+  "rule_id": "AR_04_EAT",
+  "name": "Agent Foraging and Predation with Biomass Overflow",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 70,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "agent",
+    "limit": 4,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "action_taken"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "0"
+          }
+        }
+      },
+      "right": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "hunger"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "30.000000"
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "IF",
+      "condition": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "hunger"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "30.000000"
+        }
+      },
+      "then": [
+        {
+          "op": "FIND_ENTITY",
+          "collection_source": "cell_entities",
+          "entity_type": "autotroph",
+          "result_var": "food_plant",
+          "max_scan": 4,
+          "limit": 1,
+          "filter": {
+            "op": "AND",
+            "left": {
+              "op": "EQUALS",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "is_alive"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "right": {
+              "op": "GREATER_THAN_OR_EQUAL",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "10.000000"
+              }
+            }
+          }
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "NOT_EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "food_plant",
+              "property": "id"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "food_plant",
+              "property": "biomass",
+              "delta": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "-10.000000"
+              }
+            },
+            {
+              "op": "IF",
+              "condition": {
+                "op": "LESS_THAN_OR_EQUAL",
+                "left": {
+                  "op": "GET_PROPERTY",
+                  "entity": "target",
+                  "property": "biomass"
+                },
+                "right": {
+                  "op": "LITERAL",
+                  "type": "FIXED_POINT",
+                  "value": "493.000000"
+                }
+              },
+              "then": [
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "target",
+                  "property": "biomass",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "7.000000"
+                  }
+                },
+                {
+                  "op": "PRODUCE_RESOURCE",
+                  "pool": "detritus",
+                  "amount": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "3.000000"
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "target",
+                  "property": "biomass",
+                  "delta": {
+                    "op": "SUBTRACT",
+                    "left": {
+                      "op": "LITERAL",
+                      "type": "FIXED_POINT",
+                      "value": "500.000000"
+                    },
+                    "right": {
+                      "op": "GET_PROPERTY",
+                      "entity": "target",
+                      "property": "biomass"
+                    }
+                  }
+                },
+                {
+                  "op": "PRODUCE_RESOURCE",
+                  "pool": "detritus",
+                  "amount": {
+                    "op": "SUBTRACT",
+                    "left": {
+                      "op": "LITERAL",
+                      "type": "FIXED_POINT",
+                      "value": "10.000000"
+                    },
+                    "right": {
+                      "op": "SUBTRACT",
+                      "left": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "500.000000"
+                      },
+                      "right": {
+                        "op": "GET_PROPERTY",
+                        "entity": "target",
+                        "property": "biomass"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "target",
+              "property": "energy",
+              "delta": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "40.000000"
+              }
+            },
+            {
+              "op": "IF",
+              "condition": {
+                "op": "GREATER_THAN_OR_EQUAL",
+                "left": {
+                  "op": "GET_PROPERTY",
+                  "entity": "target",
+                  "property": "hunger"
+                },
+                "right": {
+                  "op": "LITERAL",
+                  "type": "FIXED_POINT",
+                  "value": "40.000000"
+                }
+              },
+              "then": [
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "target",
+                  "property": "hunger",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "-40.000000"
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "op": "SET_PROPERTY",
+                  "entity": "target",
+                  "property": "hunger",
+                  "value": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "0.000000"
+                  }
+                }
+              ]
+            },
+            {
+              "op": "SET_PROPERTY",
+              "entity": "target",
+              "property": "action_taken",
+              "value": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            }
+          ],
+          "else": [
+            {
+              "op": "FIND_ENTITY",
+              "collection_source": "cell_entities",
+              "entity_type": "herbivore",
+              "result_var": "prey_herb",
+              "max_scan": 4,
+              "limit": 1,
+              "filter": {
+                "op": "AND",
+                "left": {
+                  "op": "EQUALS",
+                  "left": {
+                    "op": "GET_PROPERTY",
+                    "entity": "candidate",
+                    "property": "is_alive"
+                  },
+                  "right": {
+                    "op": "LITERAL",
+                    "type": "INT64",
+                    "value": "1"
+                  }
+                },
+                "right": {
+                  "op": "GREATER_THAN_OR_EQUAL",
+                  "left": {
+                    "op": "GET_PROPERTY",
+                    "entity": "candidate",
+                    "property": "biomass"
+                  },
+                  "right": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "20.000000"
+                  }
+                }
+              }
+            },
+            {
+              "op": "IF",
+              "condition": {
+                "op": "NOT_EQUALS",
+                "left": {
+                  "op": "GET_PROPERTY",
+                  "entity": "prey_herb",
+                  "property": "id"
+                },
+                "right": {
+                  "op": "LITERAL",
+                  "type": "INT64",
+                  "value": "0"
+                }
+              },
+              "then": [
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "prey_herb",
+                  "property": "biomass",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "-20.000000"
+                  }
+                },
+                {
+                  "op": "IF",
+                  "condition": {
+                    "op": "LESS_THAN_OR_EQUAL",
+                    "left": {
+                      "op": "GET_PROPERTY",
+                      "entity": "target",
+                      "property": "biomass"
+                    },
+                    "right": {
+                      "op": "LITERAL",
+                      "type": "FIXED_POINT",
+                      "value": "486.000000"
+                    }
+                  },
+                  "then": [
+                    {
+                      "op": "ADJUST_PROPERTY",
+                      "entity": "target",
+                      "property": "biomass",
+                      "delta": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "14.000000"
+                      }
+                    },
+                    {
+                      "op": "PRODUCE_RESOURCE",
+                      "pool": "detritus",
+                      "amount": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "6.000000"
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "op": "ADJUST_PROPERTY",
+                      "entity": "target",
+                      "property": "biomass",
+                      "delta": {
+                        "op": "SUBTRACT",
+                        "left": {
+                          "op": "LITERAL",
+                          "type": "FIXED_POINT",
+                          "value": "500.000000"
+                        },
+                        "right": {
+                          "op": "GET_PROPERTY",
+                          "entity": "target",
+                          "property": "biomass"
+                        }
+                      }
+                    },
+                    {
+                      "op": "PRODUCE_RESOURCE",
+                      "pool": "detritus",
+                      "amount": {
+                        "op": "SUBTRACT",
+                        "left": {
+                          "op": "LITERAL",
+                          "type": "FIXED_POINT",
+                          "value": "20.000000"
+                        },
+                        "right": {
+                          "op": "SUBTRACT",
+                          "left": {
+                            "op": "LITERAL",
+                            "type": "FIXED_POINT",
+                            "value": "500.000000"
+                          },
+                          "right": {
+                            "op": "GET_PROPERTY",
+                            "entity": "target",
+                            "property": "biomass"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "ADJUST_PROPERTY",
+                  "entity": "target",
+                  "property": "energy",
+                  "delta": {
+                    "op": "LITERAL",
+                    "type": "FIXED_POINT",
+                    "value": "30.000000"
+                  }
+                },
+                {
+                  "op": "IF",
+                  "condition": {
+                    "op": "GREATER_THAN_OR_EQUAL",
+                    "left": {
+                      "op": "GET_PROPERTY",
+                      "entity": "target",
+                      "property": "hunger"
+                    },
+                    "right": {
+                      "op": "LITERAL",
+                      "type": "FIXED_POINT",
+                      "value": "60.000000"
+                    }
+                  },
+                  "then": [
+                    {
+                      "op": "ADJUST_PROPERTY",
+                      "entity": "target",
+                      "property": "hunger",
+                      "delta": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "-60.000000"
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "op": "SET_PROPERTY",
+                      "entity": "target",
+                      "property": "hunger",
+                      "value": {
+                        "op": "LITERAL",
+                        "type": "FIXED_POINT",
+                        "value": "0.000000"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "SET_PROPERTY",
+                  "entity": "target",
+                  "property": "action_taken",
+                  "value": {
+                    "op": "LITERAL",
+                    "type": "INT64",
+                    "value": "1"
+                  }
+                }
+              ],
+              "else": []
+            }
+          ]
+        }
+      ],
+      "else": []
+    }
+  ]
+}

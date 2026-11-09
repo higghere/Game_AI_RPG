@@ -1,0 +1,248 @@
+{
+  "rule_id": "AR_01_METABOLISM",
+  "name": "Agent Basal Respiration and Needs Accumulation",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 90,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "agent",
+    "limit": 4,
+    "filter": {
+      "op": "EQUALS",
+      "left": {
+        "op": "GET_PROPERTY",
+        "entity": "target",
+        "property": "is_alive"
+      },
+      "right": {
+        "op": "LITERAL",
+        "type": "INT64",
+        "value": "1"
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "ADJUST_PROPERTY",
+      "entity": "target",
+      "property": "age_ticks",
+      "delta": {
+        "op": "LITERAL",
+        "type": "INT64",
+        "value": "1"
+      }
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "energy"
+        },
+        "right": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "metabolic_rate"
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "NEG",
+            "operand": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "metabolic_rate"
+            }
+          }
+        }
+      ],
+      "else": [
+        {
+          "op": "SET_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "value": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.000000"
+          }
+        }
+      ]
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "biomass"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "0.100000"
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-0.100000"
+          }
+        },
+        {
+          "op": "PRODUCE_RESOURCE",
+          "pool": "detritus",
+          "amount": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.100000"
+          }
+        }
+      ],
+      "else": [
+        {
+          "op": "PRODUCE_RESOURCE",
+          "pool": "detritus",
+          "amount": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "biomass"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "value": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.000000"
+          }
+        }
+      ]
+    },
+    {
+      "op": "ADJUST_PROPERTY",
+      "entity": "target",
+      "property": "hunger",
+      "delta": {
+        "op": "GET_PROPERTY",
+        "entity": "target",
+        "property": "metabolic_rate"
+      }
+    },
+    {
+      "op": "ADJUST_PROPERTY",
+      "entity": "target",
+      "property": "thirst",
+      "delta": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "1.000000"
+      }
+    },
+    {
+      "op": "ADJUST_PROPERTY",
+      "entity": "target",
+      "property": "fatigue",
+      "delta": {
+        "op": "LITERAL",
+        "type": "FIXED_POINT",
+        "value": "0.500000"
+      }
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "AND",
+        "left": {
+          "op": "AND",
+          "left": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "age_ticks"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "50"
+            }
+          },
+          "right": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "energy"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "100.000000"
+            }
+          }
+        },
+        "right": {
+          "op": "LESS_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "reproduction_drive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "99.000000"
+          }
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "reproduction_drive",
+          "delta": {
+            "op": "MULTIPLY",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "fertility"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.500000"
+            }
+          }
+        }
+      ],
+      "else": []
+    },
+    {
+      "op": "SET_PROPERTY",
+      "entity": "target",
+      "property": "action_taken",
+      "value": {
+        "op": "LITERAL",
+        "type": "INT64",
+        "value": "0"
+      }
+    }
+  ]
+}

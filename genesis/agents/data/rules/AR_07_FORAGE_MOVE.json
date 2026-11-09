@@ -1,0 +1,175 @@
+{
+  "rule_id": "AR_07_FORAGE_MOVE",
+  "name": "Agent Foraging Locomotion and Spatial Exploration",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 40,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "agent",
+    "limit": 2,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "is_alive"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "1"
+        }
+      },
+      "right": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "action_taken"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "IF",
+      "condition": {
+        "op": "OR",
+        "left": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "hunger"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "30.000000"
+          }
+        },
+        "right": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "thirst"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "30.000000"
+          }
+        }
+      },
+      "then": [
+        {
+          "op": "FIND_ENTITY",
+          "collection_source": "cell_entities",
+          "entity_type": "autotroph",
+          "result_var": "local_food",
+          "max_scan": 4,
+          "limit": 1,
+          "filter": {
+            "op": "AND",
+            "left": {
+              "op": "EQUALS",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "is_alive"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "right": {
+              "op": "GREATER_THAN_OR_EQUAL",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "10.000000"
+              }
+            }
+          }
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "local_food",
+              "property": "id"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "target",
+              "property": "cell_x",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -1,
+                "max": 1
+              }
+            },
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "target",
+              "property": "cell_y",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -1,
+                "max": 1
+              }
+            },
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "target",
+              "property": "fatigue",
+              "delta": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "5.000000"
+              }
+            },
+            {
+              "op": "SET_PROPERTY",
+              "entity": "target",
+              "property": "action_taken",
+              "value": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            }
+          ],
+          "else": []
+        }
+      ],
+      "else": []
+    }
+  ]
+}

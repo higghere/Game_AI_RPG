@@ -1,0 +1,771 @@
+{
+  "rule_id": "AR_05_REPRODUCE",
+  "name": "Agent Sexual Reproduction and Mendelian Inheritance",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 60,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "agent",
+    "limit": 1,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "is_alive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        },
+        "right": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "action_taken"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "0"
+          }
+        }
+      },
+      "right": {
+        "op": "AND",
+        "left": {
+          "op": "EQUALS",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "sex"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "0"
+          }
+        },
+        "right": {
+          "op": "GREATER_THAN_OR_EQUAL",
+          "left": {
+            "op": "GET_PROPERTY",
+            "entity": "target",
+            "property": "reproduction_drive"
+          },
+          "right": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "60.000000"
+          }
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "FIND_ENTITY",
+      "collection_source": "cell_entities",
+      "entity_type": "agent",
+      "result_var": "mate",
+      "max_scan": 3,
+      "limit": 1,
+      "filter": {
+        "op": "AND",
+        "left": {
+          "op": "AND",
+          "left": {
+            "op": "EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "is_alive"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "right": {
+            "op": "EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "sex"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          }
+        },
+        "right": {
+          "op": "AND",
+          "left": {
+            "op": "EQUALS",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "candidate",
+              "property": "action_taken"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            }
+          },
+          "right": {
+            "op": "AND",
+            "left": {
+              "op": "GREATER_THAN_OR_EQUAL",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "biomass"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "20.000000"
+              }
+            },
+            "right": {
+              "op": "GREATER_THAN_OR_EQUAL",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "candidate",
+                "property": "energy"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "30.000000"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "IF",
+      "condition": {
+        "op": "NOT_EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "mate",
+          "property": "id"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      },
+      "then": [
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-15.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "mate",
+          "property": "biomass",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-15.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-25.000000"
+          }
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "mate",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "-25.000000"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "target",
+          "property": "reproduction_drive",
+          "value": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.000000"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "mate",
+          "property": "reproduction_drive",
+          "value": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "0.000000"
+          }
+        },
+        {
+          "op": "CREATE_ENTITY",
+          "entity_type": "agent",
+          "result_var": "child",
+          "initial_properties": {
+            "cell_x": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "cell_x"
+            },
+            "cell_y": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "cell_y"
+            },
+            "is_alive": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            },
+            "age_ticks": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            },
+            "sex": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "biomass": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "30.000000"
+            },
+            "energy": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "50.000000"
+            },
+            "generation": {
+              "op": "ADD",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "target",
+                "property": "generation"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
+            },
+            "birth_tick": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "0"
+            },
+            "action_taken": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            },
+            "hunger": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.000000"
+            },
+            "thirst": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.000000"
+            },
+            "fatigue": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.000000"
+            },
+            "reproduction_drive": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.000000"
+            },
+            "gene_metabolic_rate": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "gene_metabolic_rate"
+            },
+            "gene_foraging_range": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "gene_foraging_range"
+            },
+            "gene_fertility": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "gene_fertility"
+            },
+            "gene_longevity": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "gene_longevity"
+            },
+            "gene_boldness": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "gene_boldness"
+            },
+            "metabolic_rate": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "metabolic_rate"
+            },
+            "foraging_range": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "foraging_range"
+            },
+            "fertility": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "fertility"
+            },
+            "longevity": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "longevity"
+            },
+            "boldness": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "boldness"
+            }
+          }
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "child",
+              "property": "gene_metabolic_rate",
+              "value": {
+                "op": "GET_PROPERTY",
+                "entity": "mate",
+                "property": "gene_metabolic_rate"
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "child",
+              "property": "gene_foraging_range",
+              "value": {
+                "op": "GET_PROPERTY",
+                "entity": "mate",
+                "property": "gene_foraging_range"
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "child",
+              "property": "gene_fertility",
+              "value": {
+                "op": "GET_PROPERTY",
+                "entity": "mate",
+                "property": "gene_fertility"
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "child",
+              "property": "gene_longevity",
+              "value": {
+                "op": "GET_PROPERTY",
+                "entity": "mate",
+                "property": "gene_longevity"
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "EQUALS",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 0,
+              "max": 1
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
+            }
+          },
+          "then": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "child",
+              "property": "gene_boldness",
+              "value": {
+                "op": "GET_PROPERTY",
+                "entity": "mate",
+                "property": "gene_boldness"
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "LESS_THAN_OR_EQUAL",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 1,
+              "max": 1000
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "10"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "child",
+              "property": "gene_metabolic_rate",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -5,
+                "max": 5
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "LESS_THAN_OR_EQUAL",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 1,
+              "max": 1000
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "10"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "child",
+              "property": "gene_foraging_range",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -1,
+                "max": 1
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "LESS_THAN_OR_EQUAL",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 1,
+              "max": 1000
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "10"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "child",
+              "property": "gene_fertility",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -5,
+                "max": 5
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "LESS_THAN_OR_EQUAL",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 1,
+              "max": 1000
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "10"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "child",
+              "property": "gene_longevity",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -50,
+                "max": 50
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "IF",
+          "condition": {
+            "op": "LESS_THAN_OR_EQUAL",
+            "left": {
+              "op": "RANDOM_INT",
+              "min": 1,
+              "max": 1000
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "10"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "child",
+              "property": "gene_boldness",
+              "delta": {
+                "op": "RANDOM_INT",
+                "min": -5,
+                "max": 5
+              }
+            }
+          ],
+          "else": []
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "child",
+          "property": "metabolic_rate",
+          "value": {
+            "op": "MULTIPLY",
+            "left": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.010000"
+            },
+            "right": {
+              "op": "GET_PROPERTY",
+              "entity": "child",
+              "property": "gene_metabolic_rate"
+            }
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "child",
+          "property": "foraging_range",
+          "value": {
+            "op": "GET_PROPERTY",
+            "entity": "child",
+            "property": "gene_foraging_range"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "child",
+          "property": "fertility",
+          "value": {
+            "op": "MULTIPLY",
+            "left": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.010000"
+            },
+            "right": {
+              "op": "GET_PROPERTY",
+              "entity": "child",
+              "property": "gene_fertility"
+            }
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "child",
+          "property": "longevity",
+          "value": {
+            "op": "GET_PROPERTY",
+            "entity": "child",
+            "property": "gene_longevity"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "child",
+          "property": "boldness",
+          "value": {
+            "op": "MULTIPLY",
+            "left": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "0.010000"
+            },
+            "right": {
+              "op": "GET_PROPERTY",
+              "entity": "child",
+              "property": "gene_boldness"
+            }
+          }
+        },
+        {
+          "op": "ADD_RELATIONSHIP",
+          "source": "target",
+          "target": "child",
+          "rel_type": "parent_of",
+          "weight": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "1.000000"
+          }
+        },
+        {
+          "op": "ADD_RELATIONSHIP",
+          "source": "mate",
+          "target": "child",
+          "rel_type": "parent_of",
+          "weight": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "1.000000"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "target",
+          "property": "action_taken",
+          "value": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

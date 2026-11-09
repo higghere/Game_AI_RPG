@@ -1,0 +1,123 @@
+{
+  "rule_id": "AR_06_REST",
+  "name": "Agent Somatic Rest and Fatigue Recovery",
+  "version": "1.0.0",
+  "author": "human_bootstrap",
+  "priority": 50,
+  "spatial_partitioned": true,
+  "target_selector": {
+    "entity_type": "agent",
+    "limit": 2,
+    "filter": {
+      "op": "AND",
+      "left": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "is_alive"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "1"
+        }
+      },
+      "right": {
+        "op": "EQUALS",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "action_taken"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "INT64",
+          "value": "0"
+        }
+      }
+    }
+  },
+  "preconditions": [],
+  "effects": [
+    {
+      "op": "IF",
+      "condition": {
+        "op": "GREATER_THAN_OR_EQUAL",
+        "left": {
+          "op": "GET_PROPERTY",
+          "entity": "target",
+          "property": "fatigue"
+        },
+        "right": {
+          "op": "LITERAL",
+          "type": "FIXED_POINT",
+          "value": "50.000000"
+        }
+      },
+      "then": [
+        {
+          "op": "IF",
+          "condition": {
+            "op": "GREATER_THAN_OR_EQUAL",
+            "left": {
+              "op": "GET_PROPERTY",
+              "entity": "target",
+              "property": "fatigue"
+            },
+            "right": {
+              "op": "LITERAL",
+              "type": "FIXED_POINT",
+              "value": "40.000000"
+            }
+          },
+          "then": [
+            {
+              "op": "ADJUST_PROPERTY",
+              "entity": "target",
+              "property": "fatigue",
+              "delta": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "-40.000000"
+              }
+            }
+          ],
+          "else": [
+            {
+              "op": "SET_PROPERTY",
+              "entity": "target",
+              "property": "fatigue",
+              "value": {
+                "op": "LITERAL",
+                "type": "FIXED_POINT",
+                "value": "0.000000"
+              }
+            }
+          ]
+        },
+        {
+          "op": "ADJUST_PROPERTY",
+          "entity": "target",
+          "property": "energy",
+          "delta": {
+            "op": "LITERAL",
+            "type": "FIXED_POINT",
+            "value": "2.000000"
+          }
+        },
+        {
+          "op": "SET_PROPERTY",
+          "entity": "target",
+          "property": "action_taken",
+          "value": {
+            "op": "LITERAL",
+            "type": "INT64",
+            "value": "1"
+          }
+        }
+      ],
+      "else": []
+    }
+  ]
+}

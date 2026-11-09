@@ -37,7 +37,7 @@ from genesis.agents import (
     load_agent_rules,
 )
 from genesis.agents.binding import get_agent_analysis_binding
-from genesis.agents.params import FROZEN_AGENTS_PARAMS_V1_HASH
+from genesis.agents.params import FROZEN_AGENTS_PARAMS_V1_HASH, FROZEN_AGENTS_PARAMS_V2_HASH
 from genesis.analysis import evaluate_settlement, evaluate_group, evaluate_cultural_spread
 from genesis.persistence.snapshot import SnapshotManager
 from genesis.substrate.entities import Entity
@@ -177,6 +177,67 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
         self.assertEqual(params["genetics"]["locus_count"], 5)
         self.assertEqual(params["genetics"]["mutation_rate_per_thousand"], 10)
         self.assertTrue(params["mass_and_thermodynamics"]["biomass_overflow_to_detritus"])
+
+    def test_parameter_file_v2_hash_pinned(self) -> None:
+        """Verify agents_params_v2.json matches the canonical frozen SHA-256 hash and includes changelog."""
+        params = load_agents_params("v2", verify_hash=True)
+        self.assertIsInstance(params, dict)
+        self.assertEqual(params["version"], "v2")
+        self.assertIn("changelog", params)
+        self.assertGreaterEqual(len(params["changelog"]), 5)
+        for entry in params["changelog"]:
+            self.assertIn("change", entry)
+            self.assertIn("motivation", entry)
+            self.assertTrue(
+                "motivated by test results" in entry["motivation"].lower(),
+                f"Changelog entry '{entry['change']}' missing required motivation disclosure",
+            )
+
+    def test_rule_constants_match_params_file(self) -> None:
+        """Assert that rule constants across GRL JSON rules equal the parameters in agents_params_v2.json."""
+        p = load_agents_params("v2", verify_hash=True)
+        w = WorldState(seed=42)
+        load_agents(w)
+        rules = w.rule_registry._rules
+
+        # Verify all rules loaded
+        self.assertIn("AR_01_METABOLISM", rules)
+        self.assertIn("AR_02_MORTALITY", rules)
+        self.assertIn("AR_03_DRINK", rules)
+        self.assertIn("AR_04_EAT", rules)
+        self.assertIn("AR_05_REPRODUCE", rules)
+        self.assertIn("AR_06_REST", rules)
+        self.assertIn("AR_07_FORAGE_MOVE", rules)
+
+        # AR_01_METABOLISM
+        self.assertEqual(
+            p["actions"]["metabolism"]["basal_biomass_slough"],
+            "0.100000",
+        )
+
+        # AR_03_DRINK
+        self.assertEqual(p["actions"]["drink"]["water_intake"], "2.000000")
+        self.assertEqual(p["actions"]["drink"]["thirst_satisfaction"], "40.000000")
+
+        # AR_04_EAT
+        self.assertEqual(p["actions"]["eat_autotroph"]["intake_mass"], "10.000000")
+        self.assertEqual(p["actions"]["eat_autotroph"]["base_energy_yield"], "40.000000")
+        self.assertEqual(p["actions"]["eat_autotroph"]["hunger_satisfaction"], "40.000000")
+        self.assertEqual(p["mass_and_thermodynamics"]["biomass_cap"], "500.000000")
+
+        # AR_05_REPRODUCE
+        self.assertEqual(p["actions"]["reproduction"]["parent_biomass_deduction"], "15.000000")
+        self.assertEqual(p["actions"]["reproduction"]["parent_energy_deduction"], "25.000000")
+        self.assertEqual(p["actions"]["reproduction"]["child_base_biomass"], "30.000000")
+        self.assertEqual(p["actions"]["reproduction"]["child_base_energy"], "40.000000")
+
+        # AR_06_REST
+        self.assertEqual(p["actions"]["rest"]["fatigue_recovery"], "40.000000")
+        self.assertEqual(p["actions"]["rest"]["energy_recovery"], "2.000000")
+
+        # AR_07_FORAGE_MOVE
+        self.assertEqual(p["actions"]["forage_move"]["base_fatigue_cost"], "5.000000")
+        self.assertEqual(p["actions"]["forage_move"]["base_energy_cost"], "0.000000")
 
     # -------------------------------------------------------------------------
     # TEST-301: Determinism & Hash Reproducibility
@@ -438,10 +499,10 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
         )
 
     # -------------------------------------------------------------------------
-    # TEST-306: Resource-Bound Selection Pressure (Multi-Seed)
+    # TEST-306: Resource-Bound Selection Pressure for Low Metabolic Rate
     # -------------------------------------------------------------------------
-    def test_306_resource_bound_selection_pressure_multiseed(self) -> None:
-        """In resource-scarce conditions, low metabolic rate out-competes across multiple random seeds."""
+    def test_306_resource_bound_selection_pressure_for_low_metabolic_rate(self) -> None:
+        """In resource-scarce conditions, starvation-resistant low metabolic rate out-competes across multiple random seeds."""
         for seed in [42, 1337, 2026]:
             with self.subTest(seed=seed):
                 w = WorldState(seed=seed, journal_dir=self.journal_dir / f"select_{seed}")

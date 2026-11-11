@@ -1131,4 +1131,20 @@ The following matrix verifies that all six canonical rules comfortably operate w
   - v1.0.0 Journal Hash: `40bd69eee6666ed11e0ff69d53c14013cc7592b0c24be4fc87ec7c5c8ac95132`
   - v1.1.0 Journal Hash: `4950cad86371269063528dd6fbef69454061a30707be04c3e83c60cbac8af9be`
 
+#### Version 1.2.0 (Phase 3d Schema-Based Decoupling & Frozen Substrate Invariant)
+* **Substrate Engine:** `genesis/substrate/entities.py` reverted completely to frozen state (`Entity.__subclasses__() == []`, zero property methods on `Entity`).
+* **Schemas Updated:** `genesis/ecosystem/data/schemas/` (`autotroph.json`, `herbivore.json`, `decomposer.json`) and `genesis/agents/data/schemas/agent.json` updated with property:
+  - `"is_agent": {"type": "INT64", "min": 0, "max": 1, "default": 0}` (default 0 on autotroph, herbivore, decomposer; default 1 on agent schema).
+* **Rules Updated:** `BR_03_BASAL_METABOLISM` and `BR_05_STARVATION_DEATH` bumped from `1.1.0` to `1.2.0`.
+  - Condition updated from `NOT_EQUALS(organism.entity_type, "agent")` to `NOT_EQUALS(organism.is_agent, 1)`.
+* **Motivation:** Strictly satisfies the Layer 1 frozen substrate requirement by avoiding any substrate entity modifications, implementing ecosystem/agent decoupling entirely through declarative schema properties and standard GRL property access.
+* **Golden Hash Updates (TEST-207, 365 ticks, seed 42):**
+  - v1.0.0 State Hash: `543e7ebcaf30cd77d36416c75f1a77196c55ee9b68c002b6f49adaacecdd0f3d`
+  - v1.1.0 State Hash: `78f56eb2e28387ba4fbcd25a5fe4ca9d1c664643d8ad37b9041c9cb12c627e37`
+  - v1.2.0 State Hash: `f6567e8699a76aaaf9c58532153896e0bad86d6e8a85cd0e7ab26fac4333de18`
+  - v1.0.0 Journal Hash: `40bd69eee6666ed11e0ff69d53c14013cc7592b0c24be4fc87ec7c5c8ac95132`
+  - v1.1.0 Journal Hash: `4950cad86371269063528dd6fbef69454061a30707be04c3e83c60cbac8af9be`
+  - v1.2.0 Journal Hash: `ebe688c8b612f63c2e6ff7dfe270923ca155729d8c59b0a7d1b2650a8edd7b02`
+
+
 

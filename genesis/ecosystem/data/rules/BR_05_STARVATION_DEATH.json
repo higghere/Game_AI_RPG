@@ -1,7 +1,7 @@
 {
   "rule_id": "BR_05_STARVATION_DEATH",
   "name": "Starvation and Mortality Recycling",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "human_bootstrap",
   "priority": 50,
   "spatial_partitioned": true,
@@ -37,12 +37,12 @@
                 "left": {
                   "op": "GET_PROPERTY",
                   "entity": "organism",
-                  "property": "entity_type"
+                  "property": "is_agent"
                 },
                 "right": {
                   "op": "LITERAL",
-                  "type": "STRING",
-                  "value": "agent"
+                  "type": "INT64",
+                  "value": "1"
                 }
               }
             },

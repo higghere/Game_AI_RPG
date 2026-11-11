@@ -1,0 +1,64 @@
+================================================================================
+GENESIS PRE-REGISTERED 100-YEAR FOUNDER EXPERIMENT (36,500 TICKS)
+Pre-registered Configuration:
+  Founders: 100 (50 co-located breeding pairs across 10x5 grid)
+  Duration: 100 years = 36,500 ticks
+  Binding Resource: 50 autotrophs, cap=25.0, replenishment=0.80/tick
+  Substrate Quota Cap: 1,000 entities touched per tick, 256 ops/rule
+================================================================================
+Year   5 (tick  1825): Pop=149, Max/Cell= 5, PeakTouched=210, Elapsed= 17.4s (104.9 t/s)
+Year  10 (tick  3650): Pop=155, Max/Cell= 6, PeakTouched=210, Elapsed= 36.2s (100.7 t/s)
+Year  15 (tick  5475): Pop=148, Max/Cell= 8, PeakTouched=210, Elapsed= 55.8s ( 98.2 t/s)
+Year  20 (tick  7300): Pop=154, Max/Cell= 6, PeakTouched=210, Elapsed= 75.4s ( 96.8 t/s)
+Year  25 (tick  9125): Pop=158, Max/Cell= 6, PeakTouched=210, Elapsed= 95.1s ( 96.0 t/s)
+Year  30 (tick 10950): Pop=148, Max/Cell= 6, PeakTouched=210, Elapsed=114.6s ( 95.6 t/s)
+Year  35 (tick 12775): Pop=152, Max/Cell= 5, PeakTouched=210, Elapsed=133.5s ( 95.7 t/s)
+Year  40 (tick 14600): Pop=152, Max/Cell= 5, PeakTouched=210, Elapsed=151.8s ( 96.2 t/s)
+Year  45 (tick 16425): Pop=151, Max/Cell= 6, PeakTouched=210, Elapsed=170.5s ( 96.3 t/s)
+Year  50 (tick 18250): Pop=146, Max/Cell= 5, PeakTouched=210, Elapsed=189.2s ( 96.4 t/s)
+Year  55 (tick 20075): Pop=162, Max/Cell= 7, PeakTouched=210, Elapsed=207.6s ( 96.7 t/s)
+Year  60 (tick 21900): Pop=149, Max/Cell= 5, PeakTouched=210, Elapsed=226.2s ( 96.8 t/s)
+Year  65 (tick 23725): Pop=151, Max/Cell= 8, PeakTouched=210, Elapsed=244.7s ( 97.0 t/s)
+Year  70 (tick 25550): Pop=152, Max/Cell= 5, PeakTouched=210, Elapsed=263.5s ( 97.0 t/s)
+Year  75 (tick 27375): Pop=143, Max/Cell= 5, PeakTouched=210, Elapsed=282.1s ( 97.0 t/s)
+Year  80 (tick 29200): Pop=149, Max/Cell= 6, PeakTouched=210, Elapsed=301.7s ( 96.8 t/s)
+Year  85 (tick 31025): Pop=155, Max/Cell= 9, PeakTouched=210, Elapsed=321.0s ( 96.7 t/s)
+Year  90 (tick 32850): Pop=154, Max/Cell= 7, PeakTouched=210, Elapsed=340.3s ( 96.5 t/s)
+Year  95 (tick 34675): Pop=159, Max/Cell= 6, PeakTouched=210, Elapsed=359.3s ( 96.5 t/s)
+Year 100 (tick 36500): Pop=160, Max/Cell= 6, PeakTouched=210, Elapsed=378.5s ( 96.4 t/s)
+
+================================================================================
+FINAL RESULTS - PRE-REGISTERED 100-YEAR RUN
+================================================================================
+Total Simulated Time: 100 years (36500 ticks)
+Wall-Clock Runtime:   378.55 s (96.4 ticks/s)
+Initial Population:   100 agents (50 pairs)
+Final Population:     160 living agents
+Peak Cell Density:    9 agents / cell
+Peak Touched / Tick:  210 entities (< 1,000 substrate limit)
+Quota Failures:       0 (Zero Quota Invariant Preserved)
+================================================================================
+
+Detailed Trajectory (every 5 years):
+Year   | Tick    | Population   | Max In Cell   | Peak Touched   | Ticks/sec 
+---------------------------------------------------------------------------
+5      | 1825    | 149          | 5             | 210            | 104.9     
+10     | 3650    | 155          | 6             | 210            | 100.7     
+15     | 5475    | 148          | 8             | 210            | 98.2      
+20     | 7300    | 154          | 6             | 210            | 96.8      
+25     | 9125    | 158          | 6             | 210            | 96.0      
+30     | 10950   | 148          | 6             | 210            | 95.6      
+35     | 12775   | 152          | 5             | 210            | 95.7      
+40     | 14600   | 152          | 5             | 210            | 96.2      
+45     | 16425   | 151          | 6             | 210            | 96.3      
+50     | 18250   | 146          | 5             | 210            | 96.4      
+55     | 20075   | 162          | 7             | 210            | 96.7      
+60     | 21900   | 149          | 5             | 210            | 96.8      
+65     | 23725   | 151          | 8             | 210            | 97.0      
+70     | 25550   | 152          | 5             | 210            | 97.0      
+75     | 27375   | 143          | 5             | 210            | 97.0      
+80     | 29200   | 149          | 6             | 210            | 96.8      
+85     | 31025   | 155          | 9             | 210            | 96.7      
+90     | 32850   | 154          | 7             | 210            | 96.5      
+95     | 34675   | 159          | 6             | 210            | 96.5      
+100    | 36500   | 160          | 6             | 210            | 96.4      

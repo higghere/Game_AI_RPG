@@ -365,6 +365,11 @@
               "op": "GET_PROPERTY",
               "entity": "target",
               "property": "boldness"
+            },
+            "is_agent": {
+              "op": "LITERAL",
+              "type": "INT64",
+              "value": "1"
             }
           }
         },

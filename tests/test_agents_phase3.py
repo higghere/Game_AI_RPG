@@ -45,8 +45,9 @@ from genesis.substrate.world_state import WorldState
 
 
 # Committed golden hashes for TEST-301 (500 ticks, seed 42)
-GOLDEN_STATE_HASH_500 = "eb6b55b5396b4ca34d277597948c5cb629e8e74fc248cc98f3d9e941ed07d81b"
-GOLDEN_JOURNAL_HASH_500 = "0491b96b2878bcf9ee5de7a65307d28071e4bd437cccc402dd21cb2f67d81b42"
+# Updated in Phase 3d following is_agent schema decoupling without substrate changes
+GOLDEN_STATE_HASH_500 = "5457317cedd8fd420794692b4c1933b76198822b1991ee665f694e44bb6b22df"
+GOLDEN_JOURNAL_HASH_500 = "20a6404238f6973937b1fd0d1f1cc53dabbcd920ef0a01bef1f9a5850d1a1f69"
 
 
 def create_test_agent(
@@ -81,6 +82,7 @@ def create_test_agent(
             "cell_x": cell_x,
             "cell_y": cell_y,
             "is_alive": 1,
+            "is_agent": 1,
             "sex": sex,
             "biomass": FixedPoint.from_decimal_string(f"{biomass:.6f}"),
             "energy": FixedPoint.from_decimal_string(f"{energy:.6f}"),
@@ -130,6 +132,7 @@ def create_test_plant(
             "cell_x": cell_x,
             "cell_y": cell_y,
             "is_alive": 1,
+            "is_agent": 0,
             "energy": FixedPoint.from_decimal_string(f"{energy:.6f}"),
             "biomass": FixedPoint.from_decimal_string(f"{biomass:.6f}"),
             "hydration": FixedPoint.from_decimal_string(f"{hydration:.6f}"),
@@ -568,10 +571,10 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
         )
 
     # -------------------------------------------------------------------------
-    # TEST-306: Resource-Bound Selection Pressure for Low Metabolic Rate
+    # TEST-306: Starvation-Survival Selection for Low Metabolic Rate
     # -------------------------------------------------------------------------
-    def test_306_resource_bound_selection_pressure_for_low_metabolic_rate(self) -> None:
-        """In resource-scarce conditions, starvation-resistant low metabolic rate out-competes across multiple random seeds."""
+    def test_306_starvation_survival_selection_for_low_metabolic_rate(self) -> None:
+        """Starvation-survival test: in resource-scarce famine conditions, low-metabolic-rate agents out-survive high-metabolic-rate competitors across multiple independent seeds."""
         for seed in [42, 1337, 2026]:
             with self.subTest(seed=seed):
                 w = WorldState(seed=seed, journal_dir=self.journal_dir / f"select_{seed}")

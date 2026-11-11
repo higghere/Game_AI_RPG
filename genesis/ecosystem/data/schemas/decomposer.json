@@ -7,6 +7,7 @@
     "biomass": { "type": "FIXED_POINT", "min": "0.000000", "max": "300.000000", "default": "15.000000" },
     "age": { "type": "INT64", "min": 0, "max": 10000, "default": 0 },
     "generation": { "type": "INT64", "min": 0, "max": 10000, "default": 0 },
-    "is_alive": { "type": "INT64", "min": 0, "max": 1, "default": 1 }
+    "is_alive": { "type": "INT64", "min": 0, "max": 1, "default": 1 },
+    "is_agent": { "type": "INT64", "min": 0, "max": 1, "default": 0 }
   }
 }

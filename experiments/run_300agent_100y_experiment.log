@@ -1,0 +1,29 @@
+================================================================================
+GENESIS TEST-303 FULL 100-YEAR RUN AT 300 AGENTS (POPULATION GROWING)
+Pre-registered Configuration:
+  Initial Population: 300 agents (150 pairs across 15x10 grid)
+  Ecosystem Plants: 150 autotrophs, cap=25.0, replenish=0.80/tick
+  Duration: 100 years = 36,500 ticks
+================================================================================
+Year  10 (tick  3650): Pop=499, Max/Cell= 8, PeakTouched=671, Elapsed=114.6s ( 31.8 t/s)
+Year  20 (tick  7300): Pop=473, Max/Cell= 7, PeakTouched=671, Elapsed=230.3s ( 31.7 t/s)
+Year  30 (tick 10950): Pop=484, Max/Cell= 8, PeakTouched=671, Elapsed=342.5s ( 32.0 t/s)
+Year  40 (tick 14600): Pop=486, Max/Cell= 7, PeakTouched=671, Elapsed=457.5s ( 31.9 t/s)
+Year  50 (tick 18250): Pop=495, Max/Cell=11, PeakTouched=671, Elapsed=574.0s ( 31.8 t/s)
+Year  60 (tick 21900): Pop=470, Max/Cell= 8, PeakTouched=671, Elapsed=688.5s ( 31.8 t/s)
+Year  70 (tick 25550): Pop=476, Max/Cell= 7, PeakTouched=671, Elapsed=801.8s ( 31.9 t/s)
+Year  80 (tick 29200): Pop=503, Max/Cell=10, PeakTouched=671, Elapsed=917.8s ( 31.8 t/s)
+Year  90 (tick 32850): Pop=491, Max/Cell= 8, PeakTouched=671, Elapsed=1032.7s ( 31.8 t/s)
+Year 100 (tick 36500): Pop=480, Max/Cell= 8, PeakTouched=671, Elapsed=1150.5s ( 31.7 t/s)
+
+================================================================================
+FINAL RESULTS - 300-AGENT GROWING 100-YEAR RUN
+================================================================================
+Total Simulated Time: 100 years (36500 ticks)
+Wall-Clock Runtime:   1150.53 s (31.7 ticks/s)
+Initial Population:   300 agents (150 pairs)
+Final Population:     480 living agents
+Peak Cell Density:    11 agents / cell
+Peak Touched / Tick:  671 entities (< 1,000 limit)
+Quota Failures:       10 (Zero Quota Invariant)
+================================================================================

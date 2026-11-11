@@ -1,7 +1,7 @@
 {
   "rule_id": "BR_03_BASAL_METABOLISM",
   "name": "Basal Respiration and Maintenance",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "human_bootstrap",
   "priority": 70,
   "spatial_partitioned": true,
@@ -35,12 +35,12 @@
               "left": {
                 "op": "GET_PROPERTY",
                 "entity": "organism",
-                "property": "entity_type"
+                "property": "is_agent"
               },
               "right": {
                 "op": "LITERAL",
-                "type": "STRING",
-                "value": "agent"
+                "type": "INT64",
+                "value": "1"
               }
             }
           },

@@ -90,6 +90,10 @@
     {
       "change": "Clarified TEST-306 as resource-bound selection pressure for starvation-resistant low metabolic rate",
       "motivation": "Motivated by test results: Feeding in AR_04_EAT provides flat +40.0 energy regardless of metabolic rate; lower metabolic rate confers starvation resistance with zero somatic trade-off"
+    },
+    {
+      "change": "Added is_agent INT64 property to agent schema (default 1) and ecosystem schemas (default 0) to decouple Layer 2 rules without modifying substrate",
+      "motivation": "Motivated by test results: Reverted entities.py modification and decoupled ecosystem rules BR_03 and BR_05 from agents using pure declarative schema properties"
     }
   ],
   "description": "Frozen pre-registered parameter specification for individual autonomous agents in GENESIS Alpha.",
@@ -204,6 +208,12 @@
       "generation": {
         "default": 0,
         "max": 10000,
+        "min": 0,
+        "type": "INT64"
+      },
+      "is_agent": {
+        "default": 1,
+        "max": 1,
         "min": 0,
         "type": "INT64"
       },

@@ -109,6 +109,12 @@
       "min": "0.000000",
       "type": "FIXED_POINT"
     },
+    "is_agent": {
+      "default": 1,
+      "max": 1,
+      "min": 0,
+      "type": "INT64"
+    },
     "is_alive": {
       "default": 1,
       "max": 1,

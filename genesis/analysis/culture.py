@@ -154,6 +154,7 @@ def evaluate_cultural_spread(
             "evaluated_ticks": {
                 "start_tick": window_start_tick,
                 "end_tick": eval_tick,
+                "years": (eval_tick - window_start_tick) // 365,
             },
             "sub_criteria": {},
             "failure_reasons": ["No practice adoption events found in journal"],
@@ -417,6 +418,7 @@ def evaluate_cultural_spread(
         "evaluated_ticks": {
             "start_tick": window_start_tick,
             "end_tick": eval_tick,
+            "years": (eval_tick - window_start_tick) // 365,
         },
         "sub_criteria": sub_criteria,
         "failure_reasons": failure_reasons,

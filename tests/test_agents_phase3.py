@@ -195,49 +195,118 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
 
     def test_rule_constants_match_params_file(self) -> None:
         """Assert that rule constants across GRL JSON rules equal the parameters in agents_params_v2.json."""
+        import json
+        from genesis.agents.loader import DATA_DIR
         p = load_agents_params("v2", verify_hash=True)
-        w = WorldState(seed=42)
-        load_agents(w)
-        rules = w.rule_registry._rules
+        rules_dir = DATA_DIR / "rules"
 
-        # Verify all rules loaded
-        self.assertIn("AR_01_METABOLISM", rules)
-        self.assertIn("AR_02_MORTALITY", rules)
-        self.assertIn("AR_03_DRINK", rules)
-        self.assertIn("AR_04_EAT", rules)
-        self.assertIn("AR_05_REPRODUCE", rules)
-        self.assertIn("AR_06_REST", rules)
-        self.assertIn("AR_07_FORAGE_MOVE", rules)
+        def extract_literals(node: Any) -> List[str]:
+            lits = []
+            if isinstance(node, dict):
+                if node.get("op") == "LITERAL":
+                    lits.append(str(node.get("value")))
+                for v in node.values():
+                    lits.extend(extract_literals(v))
+            elif isinstance(node, list):
+                for item in node:
+                    lits.extend(extract_literals(item))
+            return lits
 
-        # AR_01_METABOLISM
-        self.assertEqual(
-            p["actions"]["metabolism"]["basal_biomass_slough"],
-            "0.100000",
+        def find_nodes(node: Any, predicate: Any) -> List[Dict[str, Any]]:
+            res = []
+            if isinstance(node, dict):
+                if predicate(node):
+                    res.append(node)
+                for v in node.values():
+                    res.extend(find_nodes(v, predicate))
+            elif isinstance(node, list):
+                for item in node:
+                    res.extend(find_nodes(item, predicate))
+            return res
+
+        # Verify all rules exist as JSON and verify constants
+        for r_name in [
+            "AR_01_METABOLISM",
+            "AR_02_MORTALITY",
+            "AR_03_DRINK",
+            "AR_04_EAT",
+            "AR_05_REPRODUCE",
+            "AR_06_REST",
+            "AR_07_FORAGE_MOVE",
+        ]:
+            r_path = rules_dir / f"{r_name}.json"
+            self.assertTrue(r_path.exists(), f"Rule file {r_path} not found")
+
+        # AR_01_METABOLISM.json
+        with open(rules_dir / "AR_01_METABOLISM.json", "r", encoding="utf-8") as f:
+            ar01 = json.load(f)
+        ar01_lits = extract_literals(ar01)
+        self.assertIn(p["actions"]["metabolism"]["basal_biomass_slough"], ar01_lits)
+        self.assertIn(p["needs_dynamics"]["base_hunger_growth"], ar01_lits)
+        self.assertIn(p["needs_dynamics"]["base_thirst_growth"], ar01_lits)
+        self.assertIn(p["needs_dynamics"]["base_fatigue_growth"], ar01_lits)
+        self.assertIn(p["needs_dynamics"]["base_reproduction_growth"], ar01_lits)
+
+        # AR_02_MORTALITY.json
+        with open(rules_dir / "AR_02_MORTALITY.json", "r", encoding="utf-8") as f:
+            ar02 = json.load(f)
+        ar02_lits = extract_literals(ar02)
+        self.assertIn(p["needs_dynamics"]["starvation_hunger_threshold"], ar02_lits)
+        self.assertIn(p["needs_dynamics"]["dehydration_thirst_threshold"], ar02_lits)
+
+        # AR_03_DRINK.json
+        with open(rules_dir / "AR_03_DRINK.json", "r", encoding="utf-8") as f:
+            ar03 = json.load(f)
+        ar03_lits = extract_literals(ar03)
+        self.assertIn(p["needs_dynamics"]["thirst_trigger_threshold"], ar03_lits)
+        self.assertIn(p["actions"]["drink"]["water_intake"], ar03_lits)
+        self.assertIn(p["actions"]["drink"]["thirst_satisfaction"], ar03_lits)
+
+        # AR_04_EAT.json
+        with open(rules_dir / "AR_04_EAT.json", "r", encoding="utf-8") as f:
+            ar04 = json.load(f)
+        ar04_lits = extract_literals(ar04)
+        self.assertIn(p["needs_dynamics"]["hunger_trigger_threshold"], ar04_lits)
+        self.assertIn(p["actions"]["eat_autotroph"]["intake_mass"], ar04_lits)
+        self.assertIn(p["actions"]["eat_autotroph"]["base_energy_yield"], ar04_lits)
+        self.assertIn(p["actions"]["eat_autotroph"]["hunger_satisfaction"], ar04_lits)
+        self.assertIn(p["mass_and_thermodynamics"]["biomass_cap"], ar04_lits)
+
+        # AR_05_REPRODUCE.json
+        with open(rules_dir / "AR_05_REPRODUCE.json", "r", encoding="utf-8") as f:
+            ar05 = json.load(f)
+        ar05_lits = extract_literals(ar05)
+        self.assertIn(p["needs_dynamics"]["reproduction_drive_threshold"], ar05_lits)
+        self.assertIn(p["needs_dynamics"]["reproduction_min_biomass"], ar05_lits)
+        self.assertIn(p["needs_dynamics"]["reproduction_min_energy"], ar05_lits)
+        self.assertTrue(
+            p["actions"]["reproduction"]["parent_biomass_deduction"] in ar05_lits
+            or f"-{p['actions']['reproduction']['parent_biomass_deduction']}" in ar05_lits
         )
+        self.assertTrue(
+            p["actions"]["reproduction"]["parent_energy_deduction"] in ar05_lits
+            or f"-{p['actions']['reproduction']['parent_energy_deduction']}" in ar05_lits
+        )
+        self.assertIn(p["actions"]["reproduction"]["child_base_biomass"], ar05_lits)
+        self.assertIn(p["actions"]["reproduction"]["child_base_energy"], ar05_lits)
+        # Check max_scan in AR_05
+        fe_nodes = find_nodes(ar05, lambda n: n.get("op") == "FIND_ENTITY")
+        self.assertTrue(len(fe_nodes) > 0)
+        self.assertEqual(fe_nodes[0].get("max_scan"), p["budget_guards"]["find_entity_max_scan"])
 
-        # AR_03_DRINK
-        self.assertEqual(p["actions"]["drink"]["water_intake"], "2.000000")
-        self.assertEqual(p["actions"]["drink"]["thirst_satisfaction"], "40.000000")
+        # AR_06_REST.json
+        with open(rules_dir / "AR_06_REST.json", "r", encoding="utf-8") as f:
+            ar06 = json.load(f)
+        ar06_lits = extract_literals(ar06)
+        self.assertIn(p["needs_dynamics"]["fatigue_trigger_threshold"], ar06_lits)
+        self.assertIn(p["actions"]["rest"]["fatigue_recovery"], ar06_lits)
+        self.assertIn(p["actions"]["rest"]["energy_recovery"], ar06_lits)
 
-        # AR_04_EAT
-        self.assertEqual(p["actions"]["eat_autotroph"]["intake_mass"], "10.000000")
-        self.assertEqual(p["actions"]["eat_autotroph"]["base_energy_yield"], "40.000000")
-        self.assertEqual(p["actions"]["eat_autotroph"]["hunger_satisfaction"], "40.000000")
-        self.assertEqual(p["mass_and_thermodynamics"]["biomass_cap"], "500.000000")
-
-        # AR_05_REPRODUCE
-        self.assertEqual(p["actions"]["reproduction"]["parent_biomass_deduction"], "15.000000")
-        self.assertEqual(p["actions"]["reproduction"]["parent_energy_deduction"], "25.000000")
-        self.assertEqual(p["actions"]["reproduction"]["child_base_biomass"], "30.000000")
-        self.assertEqual(p["actions"]["reproduction"]["child_base_energy"], "40.000000")
-
-        # AR_06_REST
-        self.assertEqual(p["actions"]["rest"]["fatigue_recovery"], "40.000000")
-        self.assertEqual(p["actions"]["rest"]["energy_recovery"], "2.000000")
-
-        # AR_07_FORAGE_MOVE
-        self.assertEqual(p["actions"]["forage_move"]["base_fatigue_cost"], "5.000000")
-        self.assertEqual(p["actions"]["forage_move"]["base_energy_cost"], "0.000000")
+        # AR_07_FORAGE_MOVE.json
+        with open(rules_dir / "AR_07_FORAGE_MOVE.json", "r", encoding="utf-8") as f:
+            ar07 = json.load(f)
+        ar07_lits = extract_literals(ar07)
+        self.assertIn(p["actions"]["forage_move"]["base_fatigue_cost"], ar07_lits)
 
     # -------------------------------------------------------------------------
     # TEST-301: Determinism & Hash Reproducibility

@@ -33,10 +33,12 @@ class Entity:
     def get_property(self, name: str) -> Any:
         if name == "id":
             return self.id
+        if name == "entity_type":
+            return self.entity_type
         return self.properties.get(name)
 
     def has_property(self, name: str) -> bool:
-        if name == "id":
+        if name in ("id", "entity_type"):
             return True
         return name in self.properties
 

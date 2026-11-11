@@ -1116,3 +1116,19 @@ The following matrix verifies that all six canonical rules comfortably operate w
 4. **Strict Transactional Rollback:**
    Every proposed primitive writes exclusively to `ExecutionContext` staging buffers (`staged_created_entities`, `staged_destroyed_entities`, `staged_properties`, `staged_added_edges`). If an entity touch quota, division by zero, or property constraint is violated mid-rule, all staged modifications vanish instantly, leaving world state uncorrupted.
 
+---
+
+### 8.5 Ecosystem Rule Changelog
+
+#### Version 1.1.0 (Phase 3 Coupling & Agent Entity-Type Filtering)
+* **Rules Updated:** `BR_03_BASAL_METABOLISM` and `BR_05_STARVATION_DEATH` bumped from `1.0.0` to `1.1.0`.
+* **Change Details:** Added `NOT_EQUALS(organism.entity_type, "agent")` clause to the candidate evaluation conditions.
+* **Motivation:** In Phase 3, agents co-locate with ecosystem organisms (autotrophs, herbivores) within shared spatial cells. Without this guard, ecosystem basal metabolism (`BR_03`) and ecosystem starvation mortality (`BR_05`) incorrectly evaluated and modified agent entities (which have separate lifecycle, metabolic, and mortality rules in Layer 3: `AR_01` through `AR_07`).
+* **Golden Hash Updates (TEST-207, 365 ticks, seed 42):**
+  - Evaluating `NOT_EQUALS(organism.entity_type, "agent")` and version `1.1.0` in the rule metadata alters AST operations metered per tick recorded in the event journal digest and the rule registry representation in state.
+  - v1.0.0 State Hash: `543e7ebcaf30cd77d36416c75f1a77196c55ee9b68c002b6f49adaacecdd0f3d`
+  - v1.1.0 State Hash: `78f56eb2e28387ba4fbcd25a5fe4ca9d1c664643d8ad37b9041c9cb12c627e37`
+  - v1.0.0 Journal Hash: `40bd69eee6666ed11e0ff69d53c14013cc7592b0c24be4fc87ec7c5c8ac95132`
+  - v1.1.0 Journal Hash: `4950cad86371269063528dd6fbef69454061a30707be04c3e83c60cbac8af9be`
+
+

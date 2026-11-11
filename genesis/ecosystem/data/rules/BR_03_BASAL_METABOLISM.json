@@ -1,7 +1,7 @@
 {
   "rule_id": "BR_03_BASAL_METABOLISM",
   "name": "Basal Respiration and Maintenance",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "human_bootstrap",
   "priority": 70,
   "spatial_partitioned": true,
@@ -16,16 +16,32 @@
         {
           "op": "IF",
           "condition": {
-            "op": "EQUALS",
+            "op": "AND",
             "left": {
-              "op": "GET_PROPERTY",
-              "entity": "organism",
-              "property": "is_alive"
+              "op": "EQUALS",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "organism",
+                "property": "is_alive"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "INT64",
+                "value": "1"
+              }
             },
             "right": {
-              "op": "LITERAL",
-              "type": "INT64",
-              "value": "1"
+              "op": "NOT_EQUALS",
+              "left": {
+                "op": "GET_PROPERTY",
+                "entity": "organism",
+                "property": "entity_type"
+              },
+              "right": {
+                "op": "LITERAL",
+                "type": "STRING",
+                "value": "agent"
+              }
             }
           },
           "then": [

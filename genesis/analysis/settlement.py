@@ -129,7 +129,11 @@ def evaluate_settlement(
     analysis_seed = int(p_null["default_analysis_seed"])
 
     current_tick = world.clock.current_tick
-    start_tick = max(0, current_tick - (persistence_years * sample_interval))
+    if sample_history and len(sample_history) > 0 and "tick" in sample_history[0]:
+        start_tick = sample_history[0]["tick"]
+    else:
+        start_tick = max(0, current_tick - (persistence_years * sample_interval))
+    evaluated_years = (current_tick - start_tick) // sample_interval if sample_interval > 0 else 0
 
     # 1. Extract current living agents
     living_agents: List[Dict[str, Any]] = []
@@ -153,7 +157,7 @@ def evaluate_settlement(
             "evaluated_ticks": {
                 "start_tick": start_tick,
                 "end_tick": current_tick,
-                "years": persistence_years,
+                "years": evaluated_years,
             },
             "sub_criteria": {},
             "failure_reasons": ["No spatial clusters found satisfying agent binding"],
@@ -412,7 +416,7 @@ def evaluate_settlement(
         "evaluated_ticks": {
             "start_tick": start_tick,
             "end_tick": current_tick,
-            "years": persistence_years,
+            "years": evaluated_years,
         },
         "sub_criteria": sub_criteria,
         "failure_reasons": failure_reasons,

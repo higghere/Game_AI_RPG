@@ -33,8 +33,9 @@ from genesis.substrate.world_state import WorldState
 
 
 # Committed golden hashes for TEST-207 (365 ticks, seed 42)
-GOLDEN_STATE_HASH_365 = "543e7ebcaf30cd77d36416c75f1a77196c55ee9b68c002b6f49adaacecdd0f3d"
-GOLDEN_JOURNAL_HASH_365 = "40bd69eee6666ed11e0ff69d53c14013cc7592b0c24be4fc87ec7c5c8ac95132"
+# Updated in Phase 3c following decoupling of ecosystem metabolism/mortality from agents (rule version 1.1.0)
+GOLDEN_STATE_HASH_365 = "78f56eb2e28387ba4fbcd25a5fe4ca9d1c664643d8ad37b9041c9cb12c627e37"
+GOLDEN_JOURNAL_HASH_365 = "4950cad86371269063528dd6fbef69454061a30707be04c3e83c60cbac8af9be"
 
 
 class TestEcosystemAcceptance(unittest.TestCase):

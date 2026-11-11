@@ -225,6 +225,7 @@ def evaluate_group(
     nodes, edges, edge_years = build_interaction_graph(
         world, binding, window_start_tick, window_end_tick
     )
+    evaluated_years = (window_end_tick - window_start_tick) // 365
 
     if not nodes or not edges:
         return {
@@ -236,7 +237,7 @@ def evaluate_group(
             "evaluated_ticks": {
                 "start_tick": window_start_tick,
                 "end_tick": window_end_tick,
-                "years": persistence_years,
+                "years": evaluated_years,
             },
             "sub_criteria": {},
             "failure_reasons": ["No interaction graph edges found"],
@@ -253,7 +254,7 @@ def evaluate_group(
             "evaluated_ticks": {
                 "start_tick": window_start_tick,
                 "end_tick": window_end_tick,
-                "years": persistence_years,
+                "years": evaluated_years,
             },
             "sub_criteria": {},
             "failure_reasons": ["No communities detected via LPA"],
@@ -464,7 +465,7 @@ def evaluate_group(
         "evaluated_ticks": {
             "start_tick": window_start_tick,
             "end_tick": window_end_tick,
-            "years": persistence_years,
+            "years": evaluated_years,
         },
         "sub_criteria": sub_criteria,
         "failure_reasons": failure_reasons,

@@ -37,7 +37,11 @@ from genesis.agents import (
     load_agent_rules,
 )
 from genesis.agents.binding import get_agent_analysis_binding
-from genesis.agents.params import FROZEN_AGENTS_PARAMS_V1_HASH, FROZEN_AGENTS_PARAMS_V2_HASH
+from genesis.agents.params import (
+    FROZEN_AGENTS_PARAMS_V1_HASH,
+    FROZEN_AGENTS_PARAMS_V2_HASH,
+    FROZEN_AGENTS_PARAMS_V3_HASH,
+)
 from genesis.analysis import evaluate_settlement, evaluate_group, evaluate_cultural_spread
 from genesis.persistence.snapshot import SnapshotManager
 from genesis.substrate.entities import Entity
@@ -196,11 +200,26 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
                 f"Changelog entry '{entry['change']}' missing required motivation disclosure",
             )
 
+    def test_parameter_file_v3_hash_pinned(self) -> None:
+        """Verify agents_params_v3.json matches the canonical frozen SHA-256 hash and includes changelog."""
+        params = load_agents_params("v3", verify_hash=True)
+        self.assertIsInstance(params, dict)
+        self.assertEqual(params["version"], "v3")
+        self.assertIn("changelog", params)
+        self.assertGreaterEqual(len(params["changelog"]), 6)
+        for entry in params["changelog"]:
+            self.assertIn("change", entry)
+            self.assertIn("motivation", entry)
+            self.assertTrue(
+                "motivated by test results" in entry["motivation"].lower(),
+                f"Changelog entry '{entry['change']}' missing required motivation disclosure",
+            )
+
     def test_rule_constants_match_params_file(self) -> None:
-        """Assert that rule constants across GRL JSON rules equal the parameters in agents_params_v2.json."""
+        """Assert that rule constants across GRL JSON rules equal the parameters in agents_params_v3.json."""
         import json
         from genesis.agents.loader import DATA_DIR
-        p = load_agents_params("v2", verify_hash=True)
+        p = load_agents_params("v3", verify_hash=True)
         rules_dir = DATA_DIR / "rules"
 
         def extract_literals(node: Any) -> List[str]:
@@ -397,10 +416,15 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
         self._assert_zero_quota_failures(world, "TEST-302")
 
     # -------------------------------------------------------------------------
-    # TEST-303: Zero Quota Failures Over Multi-Scale Runs With Peak Touches
+    # TEST-303: Short Multi-Scale Quota Check (Pointing to experiments/)
     # -------------------------------------------------------------------------
-    def test_303_zero_quota_failures_multiscale_runs(self) -> None:
-        """Zero QuotaExceededError occurrences and peak entities touched recorded (< 1000) at 100, 200, 300 agents."""
+    def test_303_short_quota_check_multiscale(self) -> None:
+        """Short multi-scale quota check (30 ticks at 100, 200, 300 agents).
+        
+        Asserts zero QuotaExceededError occurrences and peak entities touched recorded (< 1000).
+        For full 100-year (36,500-tick) multi-scale experiments with population dynamics,
+        see experiments/run_100y_founder_experiment.py and experiments/run_300agent_100y_experiment.py.
+        """
         for pop_size in [100, 200, 300]:
             with self.subTest(pop_size=pop_size):
                 world = WorldState(seed=101 + pop_size, journal_dir=self.journal_dir / f"scale_{pop_size}")
@@ -571,10 +595,14 @@ class TestAgentsPhase3Acceptance(unittest.TestCase):
         )
 
     # -------------------------------------------------------------------------
-    # TEST-306: Starvation-Survival Selection for Low Metabolic Rate
+    # TEST-306: Starvation-Survival Under Resource Scarcity
     # -------------------------------------------------------------------------
     def test_306_starvation_survival_selection_for_low_metabolic_rate(self) -> None:
-        """Starvation-survival test: in resource-scarce famine conditions, low-metabolic-rate agents out-survive high-metabolic-rate competitors across multiple independent seeds."""
+        """Starvation-survival test: in resource-scarce famine conditions, low-metabolic-rate
+        phenotypes out-survive high-metabolic-rate competitors across multiple independent seeds.
+        Note: Differential starvation survival between initial phenotypes is demonstrated;
+        heritable natural selection across generations is not demonstrated.
+        """
         for seed in [42, 1337, 2026]:
             with self.subTest(seed=seed):
                 w = WorldState(seed=seed, journal_dir=self.journal_dir / f"select_{seed}")

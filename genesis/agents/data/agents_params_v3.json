@@ -1,0 +1,371 @@
+{
+  "actions": {
+    "drink": {
+      "thirst_satisfaction": "50.000000",
+      "water_intake": "2.000000"
+    },
+    "eat_autotroph": {
+      "assimilation_efficiency": "0.700000",
+      "base_energy_yield": "40.000000",
+      "hunger_satisfaction": "40.000000",
+      "intake_mass": "10.000000",
+      "unassimilated_waste_fraction": "0.300000"
+    },
+    "eat_herbivore": {
+      "assimilation_efficiency": "0.700000",
+      "base_energy_yield": "30.000000",
+      "hunger_satisfaction": "60.000000",
+      "intake_mass": "20.000000",
+      "unassimilated_waste_fraction": "0.300000"
+    },
+    "forage_move": {
+      "base_energy_cost": "0.000000",
+      "base_fatigue_cost": "5.000000"
+    },
+    "metabolism": {
+      "basal_biomass_slough": "0.100000",
+      "basal_energy_cost": "1.000000"
+    },
+    "reproduction": {
+      "child_base_biomass": "30.000000",
+      "child_base_energy": "50.000000",
+      "parent_biomass_contribution_frac": "0.250000",
+      "parent_biomass_deduction": "15.000000",
+      "parent_energy_contribution_frac": "0.250000",
+      "parent_energy_deduction": "25.000000"
+    },
+    "rest": {
+      "energy_recovery": "2.000000",
+      "fatigue_recovery": "40.000000"
+    }
+  },
+  "budget_guards": {
+    "find_entity_limit": 1,
+    "find_entity_max_scan": 3,
+    "max_entities_touched_per_tick": 1000,
+    "max_operations_per_rule": 256,
+    "target_selector_limit": 4
+  },
+  "changelog": [
+    {
+      "change": "Expanded needs property max bounds to 200.000000 in agent.json schema",
+      "motivation": "Motivated by test results: In TEST-304, hunger reached 100.8 before AR_02_MORTALITY executed, causing PropertyValueOutOfBoundsError before mortality could execute cleanly"
+    },
+    {
+      "change": "Added age property to agent.json entity schema (INT64, min 0, max 500000)",
+      "motivation": "Motivated by test results: Layer 1 ecosystem rules (BR_03_BASAL_METABOLISM) iterate over cell_entities and query age, causing UnknownPropertyError when agents share cells with ecosystem entities"
+    },
+    {
+      "change": "Clamped reproduction_drive increment with reproduction_drive <= 99.0 precondition in AR_01_METABOLISM",
+      "motivation": "Motivated by test results: Unmated agents accumulated reproduction_drive past the schema maximum of 200.0, causing PropertyValueOutOfBoundsError"
+    },
+    {
+      "change": "Restricted mate candidate search in AR_05_REPRODUCE to max_scan: 3 and tightened pre-filter (sex == 1, action_taken == 0, biomass >= 20.0, energy >= 30.0)",
+      "motivation": "Motivated by test results: Multi-agent candidate evaluations exceeded the 256 GRL operation budget per cell (257 > 256), triggering QuotaExceededError. Also updated reproduction_min_biomass to 20.0 and reproduction_min_energy to 30.0"
+    },
+    {
+      "change": "Added explicit parent_biomass_deduction (15.0) and parent_energy_deduction (25.0) in reproduction parameters",
+      "motivation": "Motivated by test results: Declared explicit per-parent somatic deductions matching AR_05_REPRODUCE effects (15.0x2 = 30.0 child biomass, 25.0x2 = 50.0 child energy)"
+    },
+    {
+      "change": "Increased eat_autotroph base_energy_yield from 15.0 to 40.0",
+      "motivation": "Motivated by test results: Energy yield of 15.0 was insufficient to sustain metabolic needs and allow reproduction drive accumulation without entering starvation"
+    },
+    {
+      "change": "Reduced fatigue_trigger_threshold from 50.0 to 40.0",
+      "motivation": "Motivated by test results: Prevents agents from accumulating high fatigue before resting, ensuring stable circadian sleep/wake cycles"
+    },
+    {
+      "change": "Increased target_selector_limit from 2 to 4 in budget_guards",
+      "motivation": "Motivated by test results: Allowed up to 4 agents to execute actions per cell without starving crowded cells"
+    },
+    {
+      "change": "Removed locomotion energy deduction from AR_07_FORAGE_MOVE, keeping metabolic_rate as sole energy drain",
+      "motivation": "Motivated by test results: In TEST-304, wandering agents exhausted energy at tick 58 instead of within the pre-registered [95, 105] starvation window"
+    },
+    {
+      "change": "Calibrated TEST-307 spatial distribution (18 agents across 3x3 grid) and plant carrying capacity (cap 15.0, replenishment 1.0)",
+      "motivation": "Motivated by test results: Placing 16 agents at (0, 0) caused single-cell operation congestion (263 quota failures) and unbounded population growth without resource limitation"
+    },
+    {
+      "change": "Clarified TEST-306 as resource-bound selection pressure for starvation-resistant low metabolic rate",
+      "motivation": "Motivated by test results: Feeding in AR_04_EAT provides flat +40.0 energy regardless of metabolic rate; lower metabolic rate confers starvation resistance with zero somatic trade-off"
+    },
+    {
+      "change": "Added is_agent INT64 property to agent schema (default 1) and ecosystem schemas (default 0) to decouple Layer 2 rules without modifying substrate",
+      "motivation": "Motivated by test results: Reverted entities.py modification and decoupled ecosystem rules BR_03 and BR_05 from agents using pure declarative schema properties"
+    }
+  ],
+  "description": "Frozen pre-registered parameter specification for individual autonomous agents in GENESIS Alpha.",
+  "emergence_binding": {
+    "agent_entity_types": [
+      "agent"
+    ],
+    "alive_prop": "is_alive",
+    "birth_tick_prop": "birth_tick",
+    "cooperation_applicable": false,
+    "culture_applicable": false,
+    "not_applicable_reasons": {
+      "cultural_spread": "Phase 3 agents have no memes, practices, or adoption events.",
+      "group_emergence": "Phase 3 agents have no trade, tribute, or political cooperation edges/events. Interaction graph is empty."
+    },
+    "parent_edge_kind": "parent_of",
+    "pos_x_prop": "cell_x",
+    "pos_y_prop": "cell_y"
+  },
+  "genetics": {
+    "inheritance_mode": "mendelian_independent_assortment",
+    "loci_names": [
+      "gene_metabolic_rate",
+      "gene_foraging_range",
+      "gene_fertility",
+      "gene_longevity",
+      "gene_boldness"
+    ],
+    "locus_count": 5,
+    "mutation_max_step": 5,
+    "mutation_rate_per_thousand": 10
+  },
+  "mass_and_thermodynamics": {
+    "biomass_cap": "500.000000",
+    "biomass_overflow_to_detritus": true,
+    "closed_mass_pools": [
+      "biomass",
+      "detritus",
+      "soil_minerals",
+      "soil_water"
+    ],
+    "energy_explanation": "Energy (solar_flux, agent/organism energy) is an open thermodynamic driver driving metabolic transitions and is dissipated as work/heat. It is strictly excluded from closed mass accounting.",
+    "energy_outside_ledger": true,
+    "overflow_explanation": "When feeding intake exceeds available headroom below biomass_cap (500.0), excess assimilated biomass overflows 1:1 directly into environmental detritus, guaranteeing exact zero-leak mass conservation."
+  },
+  "needs_dynamics": {
+    "base_fatigue_growth": "0.500000",
+    "base_hunger_growth": "1.000000",
+    "base_reproduction_growth": "0.500000",
+    "base_thirst_growth": "1.000000",
+    "dehydration_thirst_threshold": "100.000000",
+    "fatigue_trigger_threshold": "40.000000",
+    "hunger_trigger_threshold": "30.000000",
+    "maturity_age_ticks": 50,
+    "reproduction_drive_threshold": "60.000000",
+    "reproduction_min_biomass": "20.000000",
+    "reproduction_min_energy": "30.000000",
+    "starvation_hunger_threshold": "100.000000",
+    "thirst_trigger_threshold": "30.000000"
+  },
+  "phase": "Phase 3: Individual Agents as Data (Traits, Needs, Genetics)",
+  "schema": {
+    "body_state": {
+      "action_taken": {
+        "default": 0,
+        "max": 1,
+        "min": 0,
+        "type": "INT64"
+      },
+      "age": {
+        "default": 0,
+        "max": 500000,
+        "min": 0,
+        "type": "INT64"
+      },
+      "age_ticks": {
+        "default": 0,
+        "max": 500000,
+        "min": 0,
+        "type": "INT64"
+      },
+      "biomass": {
+        "default": "40.000000",
+        "max": "500.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      },
+      "birth_tick": {
+        "default": 0,
+        "max": 100000000,
+        "min": 0,
+        "type": "INT64"
+      },
+      "cell_x": {
+        "default": 0,
+        "max": 10000,
+        "min": -10000,
+        "type": "INT64"
+      },
+      "cell_y": {
+        "default": 0,
+        "max": 10000,
+        "min": -10000,
+        "type": "INT64"
+      },
+      "energy": {
+        "default": "100.000000",
+        "max": "1000.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      },
+      "generation": {
+        "default": 0,
+        "max": 10000,
+        "min": 0,
+        "type": "INT64"
+      },
+      "is_agent": {
+        "default": 1,
+        "max": 1,
+        "min": 0,
+        "type": "INT64"
+      },
+      "is_alive": {
+        "default": 1,
+        "max": 1,
+        "min": 0,
+        "type": "INT64"
+      },
+      "sex": {
+        "default": 0,
+        "max": 1,
+        "min": 0,
+        "type": "INT64"
+      }
+    },
+    "entity_type": "agent",
+    "genes": {
+      "gene_boldness": {
+        "default": 50,
+        "description": "Locus 4: Feeding vs resting priority threshold allele. Scaled by 1/100.",
+        "max": 100,
+        "min": 0,
+        "type": "INT64"
+      },
+      "gene_fertility": {
+        "default": 100,
+        "description": "Locus 2: Reproduction drive accumulation multiplier allele. Scaled by 1/100.",
+        "max": 200,
+        "min": 50,
+        "type": "INT64"
+      },
+      "gene_foraging_range": {
+        "default": 1,
+        "description": "Locus 1: Maximum grid movement step in Chebyshev distance.",
+        "max": 3,
+        "min": 1,
+        "type": "INT64"
+      },
+      "gene_longevity": {
+        "default": 1000,
+        "description": "Locus 3: Lifespan limit in ticks before senescence death.",
+        "max": 2500,
+        "min": 500,
+        "type": "INT64"
+      },
+      "gene_metabolic_rate": {
+        "default": 100,
+        "description": "Locus 0: Metabolic rate integer allele. Scaled by 1/100 to produce metabolic_rate trait.",
+        "max": 200,
+        "min": 50,
+        "type": "INT64"
+      }
+    },
+    "needs": {
+      "fatigue": {
+        "default": "0.000000",
+        "max": "200.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      },
+      "hunger": {
+        "default": "0.000000",
+        "max": "200.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      },
+      "reproduction_drive": {
+        "default": "0.000000",
+        "max": "200.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      },
+      "thirst": {
+        "default": "0.000000",
+        "max": "200.000000",
+        "min": "0.000000",
+        "type": "FIXED_POINT"
+      }
+    },
+    "traits": {
+      "boldness": {
+        "default": "0.500000",
+        "formula": "gene_boldness / 100",
+        "max": "1.000000",
+        "min": "0.000000",
+        "trade_off": "Higher boldness prompts active foraging even at low hunger, spending movement energy to maintain high energy reserves.",
+        "type": "FIXED_POINT"
+      },
+      "fertility": {
+        "default": "1.000000",
+        "formula": "gene_fertility / 100",
+        "max": "2.000000",
+        "min": "0.500000",
+        "trade_off": "Higher fertility accelerates reproduction drive accumulation, but increases risk of maternal exhaustion if biomass and energy are depleted.",
+        "type": "FIXED_POINT"
+      },
+      "foraging_range": {
+        "default": 1,
+        "formula": "gene_foraging_range",
+        "max": 3,
+        "min": 1,
+        "trade_off": "Larger step range enables reaching distant food patches, but costs proportionately higher movement energy and fatigue per step.",
+        "type": "INT64"
+      },
+      "longevity": {
+        "default": 1000,
+        "formula": "gene_longevity",
+        "max": 2500,
+        "min": 500,
+        "trade_off": "Longer lifespan permits more lifetime reproductive cycles, but accumulates late-life somatic wear.",
+        "type": "INT64"
+      },
+      "metabolic_rate": {
+        "default": "1.000000",
+        "formula": "gene_metabolic_rate / 100",
+        "max": "2.000000",
+        "min": "0.500000",
+        "trade_off": "Lower metabolic rate reduces hunger accumulation and basal energy burn (starvation resistance), but yields lower energy extraction efficiency from food (0.8x vs 1.2x at high metabolism).",
+        "type": "FIXED_POINT"
+      }
+    }
+  },
+  "schema_version": "2.0.0",
+  "test_criteria": {
+    "test_303_allow_growth": true,
+    "test_304_case_1_starvation_window": [
+      95,
+      105
+    ],
+    "test_304_case_2_fast_metabolism_window": [
+      45,
+      55
+    ],
+    "test_306_efficient_min_fraction": "0.750000",
+    "test_306_multi_seeds": [
+      42,
+      1337,
+      2026
+    ],
+    "test_307_grid_size": [
+      3,
+      3
+    ],
+    "test_307_initial_agents": 18,
+    "test_307_max_variance_ratio": "0.150000",
+    "test_307_observation_window": [
+      150,
+      350
+    ],
+    "test_307_plant_biomass_cap": "15.000000",
+    "test_307_plant_replenish_amount": "1.000000"
+  },
+  "version": "v3"
+}

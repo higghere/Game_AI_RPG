@@ -4,11 +4,11 @@ This document records all calibration sweeps performed prior to executing the 10
 
 ---
 
-## 1. Context and Objective
+## 1. Context and Invariants
 Under the GENESIS Substrate Invariants:
 - Substrate Quota Cap: **1,000 entities touched per tick**, **256 ops/rule invocation**.
 - Closed Mass Conservation: strictly conserved ($\pm 0.000000$).
-- Target: Pre-register a stable carrying capacity equilibrium that sustains long-term survival over 36,500 ticks (100 simulated years) without population collapse to zero and without approaching unsustainable congestion (>600 agents).
+- Target: Calibrate a sustainable carrying-capacity equilibrium that maintains long-term survival over 36,500 ticks (100 simulated years) without population collapse to zero and without approaching unsustainable congestion (>600 agents).
 
 ---
 
@@ -17,11 +17,11 @@ Under the GENESIS Substrate Invariants:
 ### Sweep 1: Single-Cell Quota Stress Calibration
 - **Setup:** Single cell $(0, 0)$, 16 initial agents (8 pairs), 0 autotrophs.
 - **Duration:** 50 ticks.
-- **Hypothesis:** Test whether dense multi-agent co-location within a single cell violates the rule execution quota under high interaction density.
-- **Results:**
-  - Quota Failures: 263 `QuotaExceededError` events triggered in `AR_01_METABOLISM` and `AR_07_FORAGE_MOVE`.
-  - Max cell density: 16 agents/cell.
-- **Finding:** High spatial congestion in a single cell exhausts the per-rule budget guard (`256 ops/rule`). Dispersing founders across a grid is essential to maintain zero quota failures.
+- **Hypothesis:** Test whether dense multi-agent co-location within a single cell violates rule execution quotas under high interaction density.
+- **Results & Reconciled Failure Mode:**
+  - 263 `QuotaExceededError` events occurred.
+  - **Root Cause & Rule Interaction:** When 16 agents occupied $(0, 0)$, `AR_05_REPRODUCE` attempted to evaluate all 16 candidate mates in the cell without a search ceiling, consuming 257 operations (exceeding the 256 ops/rule limit). Concurrently, `AR_07_FORAGE_MOVE` and `AR_01_METABOLISM` encountered excessive candidate evaluation density.
+  - **Resolution:** Motivated two coordinated fixes: (1) adding `find_entity_max_scan: 3` and mate pre-filtering in `AR_05_REPRODUCE` to cap mate searches, and (2) dispersing founder populations across a spatial grid (e.g. $10 \times 5$) to prevent unnatural single-cell congestion.
 
 ---
 
@@ -33,9 +33,9 @@ Under the GENESIS Substrate Invariants:
 - **Duration:** 36,500 ticks (100 simulated years).
 - **Results (from `experiments/task-4190.log`):**
   - Year 5 (tick 1,825): Population = 31 agents, Max/Cell = 2, Peak Touched = 150.
-  - Year 10 (tick 3,650): Population = 0 agents (extinction at tick 2,190).
+  - Year 10 (tick 3,650): Population = 0 agents (complete extinction occurred at tick 2,190).
   - Years 15–100: Population = 0.
-- **Finding:** A replenishment rate of 0.50 biomass/tick provides 25.0 total biomass influx per tick across 50 cells, which is insufficient to support 100 agents with basal metabolic draw (~30–40 biomass/tick total). Agents suffer caloric deficit, failing to reproduce and starving to death by Year 10.
+- **Finding:** A replenishment rate of 0.50 biomass/tick yields only 25.0 aggregate biomass influx per tick across 50 cells, which is insufficient to sustain the basal metabolic burn of ~100 agents (~30–40 biomass/tick aggregate). Agents suffered severe caloric deficit and starved to death by Year 10.
 
 ---
 
@@ -49,7 +49,7 @@ Under the GENESIS Substrate Invariants:
   - Year 5 (tick 1,825): Population = 284 agents.
   - Year 10 (tick 3,650): Population = 512 agents.
   - Year 20 (tick 7,300): Population = 863 agents.
-- **Finding:** Replenishment of 2.00/tick caused runaway exponential population expansion, exceeding 600 agents and approaching 1,000 agents. This risks violating the substrate entity touch quota (1,000 entities/tick limit).
+- **Finding:** Replenishment of 2.00/tick drove rapid exponential population expansion, exceeding 600 agents and approaching 1,000 agents. This risked violating the substrate entity touch quota (1,000 entities/tick limit).
 
 ---
 
@@ -67,8 +67,8 @@ Under the GENESIS Substrate Invariants:
 
 ---
 
-### Sweep 5: Pre-Registered Production Baseline Selection
-Based on Sweep 4, the **`0.80` biomass/tick replenishment** and **`25.0` cap** regime was selected as the optimal carrying-capacity configuration:
+### Sweep 5: Calibrated Setup Selection
+Based on the empirical sweeps (Sweeps 1–4), the **`0.80` biomass/tick replenishment** and **`25.0` cap** regime was selected as the **calibrated setup** for production experiments:
 1. **100-Founder Experiment (`experiments/run_100y_founder_experiment.py`):**
    - Grid: $10 \times 5$ (50 cells).
    - Founders: 100 (50 pairs).
@@ -85,3 +85,16 @@ Based on Sweep 4, the **`0.80` biomass/tick replenishment** and **`25.0` cap** r
    - Peak Cell Density: 11 agents / cell.
    - Peak Touched / Tick: 671 entities (within 1,000 quota).
    - Quota Failures: **10** (out of 36,500 ticks).
+
+---
+
+## 3. Reconciliation of Parameter Change Rationales
+
+### 1. Locomotion Energy Deduction Removal (`AR_07_FORAGE_MOVE`, $2.0 \to 0.0$)
+- **Immediate Empirical Driver:** In `TEST-304`, wandering agents burned $2.0$ energy per foraging movement step in addition to basal metabolism. Unsupplied agents exhausted their energy reserve by tick 58 rather than dying within the pre-registered $[95, 105]$ tick starvation window.
+- **Secondary Methodological Effect:** In `TEST-306`, removing locomotion energy cost eliminated movement frequency as an uncontrolled kinetic confound, isolating basal `metabolic_rate` as the sole variable energy expenditure.
+- **Synthesis:** The change was originally motivated by calibration against `TEST-304` starvation mortality timing, and subsequently recognized as essential to ensure clean, unconfounded metabolic rate comparisons in `TEST-306`.
+
+### 2. Schema `age` Property Addition (`agent.json`, INT64)
+- **Immediate Empirical Driver:** When Phase 3 agents were initially co-located with Phase 2 ecosystem organisms prior to schema-based rule gating, `BR_03_BASAL_METABOLISM` iterated over all cell entities and queried `organism.age`, causing an `UnknownPropertyError` because agents only defined `age_ticks`.
+- **Subsequent Evolution:** With Phase 3d implementing declarative schema-level decoupling via `is_agent` (so `BR_03` and `BR_05` strictly ignore agents), `age` was no longer queried by ecosystem rules. However, `age` was retained in `agent.json` to mirror `age_ticks // 365` for emergence analysis bindings (`AnalysisBinding`) and backward compatibility.

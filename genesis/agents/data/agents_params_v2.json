@@ -1,7 +1,7 @@
 {
   "actions": {
     "drink": {
-      "thirst_satisfaction": "50.000000",
+      "thirst_satisfaction": "40.000000",
       "water_intake": "2.000000"
     },
     "eat_autotroph": {
@@ -28,7 +28,7 @@
     },
     "reproduction": {
       "child_base_biomass": "30.000000",
-      "child_base_energy": "50.000000",
+      "child_base_energy": "40.000000",
       "parent_biomass_contribution_frac": "0.250000",
       "parent_biomass_deduction": "15.000000",
       "parent_energy_contribution_frac": "0.250000",
@@ -61,23 +61,7 @@
     },
     {
       "change": "Restricted mate candidate search in AR_05_REPRODUCE to max_scan: 3 and tightened pre-filter (sex == 1, action_taken == 0, biomass >= 20.0, energy >= 30.0)",
-      "motivation": "Motivated by test results: Multi-agent candidate evaluations exceeded the 256 GRL operation budget per cell (257 > 256), triggering QuotaExceededError. Also updated reproduction_min_biomass to 20.0 and reproduction_min_energy to 30.0"
-    },
-    {
-      "change": "Added explicit parent_biomass_deduction (15.0) and parent_energy_deduction (25.0) in reproduction parameters",
-      "motivation": "Motivated by test results: Declared explicit per-parent somatic deductions matching AR_05_REPRODUCE effects (15.0x2 = 30.0 child biomass, 25.0x2 = 50.0 child energy)"
-    },
-    {
-      "change": "Increased eat_autotroph base_energy_yield from 15.0 to 40.0",
-      "motivation": "Motivated by test results: Energy yield of 15.0 was insufficient to sustain metabolic needs and allow reproduction drive accumulation without entering starvation"
-    },
-    {
-      "change": "Reduced fatigue_trigger_threshold from 50.0 to 40.0",
-      "motivation": "Motivated by test results: Prevents agents from accumulating high fatigue before resting, ensuring stable circadian sleep/wake cycles"
-    },
-    {
-      "change": "Increased target_selector_limit from 2 to 4 in budget_guards",
-      "motivation": "Motivated by test results: Allowed up to 4 agents to execute actions per cell without starving crowded cells"
+      "motivation": "Motivated by test results: Multi-agent candidate evaluations exceeded the 256 GRL operation budget per cell (257 > 256), triggering QuotaExceededError"
     },
     {
       "change": "Removed locomotion energy deduction from AR_07_FORAGE_MOVE, keeping metabolic_rate as sole energy drain",
@@ -90,10 +74,6 @@
     {
       "change": "Clarified TEST-306 as resource-bound selection pressure for starvation-resistant low metabolic rate",
       "motivation": "Motivated by test results: Feeding in AR_04_EAT provides flat +40.0 energy regardless of metabolic rate; lower metabolic rate confers starvation resistance with zero somatic trade-off"
-    },
-    {
-      "change": "Added is_agent INT64 property to agent schema (default 1) and ecosystem schemas (default 0) to decouple Layer 2 rules without modifying substrate",
-      "motivation": "Motivated by test results: Reverted entities.py modification and decoupled ecosystem rules BR_03 and BR_05 from agents using pure declarative schema properties"
     }
   ],
   "description": "Frozen pre-registered parameter specification for individual autonomous agents in GENESIS Alpha.",
@@ -208,12 +188,6 @@
       "generation": {
         "default": 0,
         "max": 10000,
-        "min": 0,
-        "type": "INT64"
-      },
-      "is_agent": {
-        "default": 1,
-        "max": 1,
         "min": 0,
         "type": "INT64"
       },

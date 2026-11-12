@@ -17,7 +17,11 @@ FROZEN_AGENTS_PARAMS_V1_HASH: str = (
 )
 
 FROZEN_AGENTS_PARAMS_V2_HASH: str = (
-    "20cb1a7791725a29643109ccb5e029525adda6be465d3dcde49a26ec39d899e5"
+    "46b4be4e31e3086dd30e086bf6949e1b1cdd4eb7cf8ffa7eb2a3b2369df8e05a"
+)
+
+FROZEN_AGENTS_PARAMS_V3_HASH: str = (
+    "850c2139bb79a6c2d2b7398b53624f3626920c5ccc7d34c35d76c3de1ab9623c"
 )
 
 _CACHED_PARAMS: Dict[str, Dict[str, Any]] = {}
@@ -29,7 +33,7 @@ def compute_canonical_params_hash(params_dict: Dict[str, Any]) -> str:
     return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
 
-def load_agents_params(version: str = "v2", verify_hash: bool = True) -> Dict[str, Any]:
+def load_agents_params(version: str = "v3", verify_hash: bool = True) -> Dict[str, Any]:
     """Load, validate, and return the agent parameters dictionary.
 
     Raises:
@@ -51,6 +55,7 @@ def load_agents_params(version: str = "v2", verify_hash: bool = True) -> Dict[st
         expected_hash = (
             FROZEN_AGENTS_PARAMS_V1_HASH if version == "v1"
             else FROZEN_AGENTS_PARAMS_V2_HASH if version == "v2"
+            else FROZEN_AGENTS_PARAMS_V3_HASH if version == "v3"
             else None
         )
         if expected_hash is not None and computed_hash != expected_hash:

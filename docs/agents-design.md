@@ -1,7 +1,7 @@
 # GENESIS Alpha — Phase 3 Design Specification: Individual Agents as Data (Traits, Needs, Genetics)
 
 **Phase:** Phase 3 (Individual Agents as Data)  
-**Status:** Approved with Engineering Conditions — Version 2.0 (Phase 3d Hardening & Ecosystem Decoupling)  
+**Status:** Approved with Engineering Conditions — Version 3.0 (Phase 3e Hardening, Purity & Calibration Audit)  
 **Runtime Requirement:** Frozen Layer 1 Runtime Substrate (`genesis/core/`, `genesis/substrate/`, `genesis/grl/`, `genesis/ecosystem/`, `genesis/analysis/`). Zero Python runtime modifications. Zero agent-specific Python classes (`Entity.__subclasses__() == []` invariant strictly preserved). All agent mechanics defined purely as **Data Declarations** (JSON schemas) and **GRL Rules** (JSON AST).
 
 ---
@@ -248,11 +248,12 @@ $$\mathbf{d6ce25cac9d58b15e5548b44c5285fde818d71a60306a6e453115839ec39c80e}$$
 * **Criterion:**
   $$\left| M_{\text{closed}}(t) - M_{\text{closed}}(0) \right| == 0.000000 \quad \forall t \in [1, 1000]$$
 
-### TEST-303: Zero Quota Failures Over 100-Year Multi-Scale Runs With Peak Touches Recorded
-* **Docstring:** Zero `QuotaExceededError` occurrences over 100-year (36,500-tick) runs allowing natural population growth at 100, 200, and 300 initial agents.
+### TEST-303: Short Multi-Scale Quota Check (Pointing to experiments/)
+* **Docstring:** Short multi-scale quota check (30 ticks at 100, 200, 300 agents). Asserts zero `QuotaExceededError` occurrences and peak entities touched recorded (< 1000).
+* **Extended Experiments:** For full 100-year (36,500-tick) multi-scale experiments with population dynamics, peak densities, and vital statistics, see [`experiments/run_100y_founder_experiment.py`](file:///c:/Users/VANSH/Documents/gameworld_ai_model/experiments/run_100y_founder_experiment.py) and [`experiments/run_300agent_100y_experiment.py`](file:///c:/Users/VANSH/Documents/gameworld_ai_model/experiments/run_300agent_100y_experiment.py).
 * **Criterion:**
   * Quota violations $== 0$. Operations per rule $\le 256$, unique entities touched per tick $\le 1000$.
-  * Continuously record and assert the maximum entities touched in any single tick across the entire run ($\text{peak\_touched} < 1000$).
+  * Continuously record and assert the maximum entities touched in any single tick across the run ($\text{peak\_touched} < 1000$).
 
 ### TEST-304: Dual-Metabolism Needs Dynamics & Mortality
 * **Docstring:** Starved agents die within pre-registered tick windows scaled by metabolic rate; nourished agents survive with oscillating needs.
@@ -267,13 +268,14 @@ $$\mathbf{d6ce25cac9d58b15e5548b44c5285fde818d71a60306a6e453115839ec39c80e}$$
   * With $\mu = 0$ across $50$ offspring, parental allele distribution is within $[35\%, 65\%]$ ($p \approx 0.50$), and zero foreign alleles appear.
   * With $\mu = 10/1000$ over $10$ generations, $100\%$ of expressed traits satisfy $\text{min}_k \le \text{trait}_k \le \text{max}_k$.
 
-### TEST-306: Starvation-Survival Selection for Low Metabolic Rate (Multi-Seed)
-* **Docstring:** Starvation-survival test: in resource-scarce famine conditions, low-metabolic-rate agents out-survive high-metabolic-rate competitors across multiple independent seeds.
-* **Pre-Registered Hypothesis & Multi-Seed Protocol:**
+### TEST-306: Starvation-Survival Under Acute Resource Scarcity (Multi-Seed)
+* **Docstring:** Starvation-survival test: in resource-scarce famine conditions, low-metabolic-rate phenotypes out-survive high-metabolic-rate competitors across multiple independent seeds.
+* **Important Scientific Boundary:** **Heritable natural selection across generations is not demonstrated in Phase 3.** TEST-306 measures differential starvation survival between initial phenotypes under acute caloric famine (low metabolic rate conferring starvation resistance with zero somatic trade-off), not evolutionary adaptation, allele frequency dynamics, or multi-generational selection.
+* **Protocol & Results:**
   * Evaluated across 10 independent random seeds: `[42, 101, 202, 303, 404, 505, 606, 707, 808, 909]`.
   * Initialized with 8 co-located founders: 4 Efficient variants ($\text{metabolic\_rate} = 0.500000$) and 4 Profligate variants ($\text{metabolic\_rate} = 1.800000$).
   * Under severe famine conditions ($30.0$ binding biomass without replenishment), all 4 Profligate agents deplete caloric reserves and suffer starvation mortality by tick $200$.
-  * Surviving population consists 100% of the Efficient low-metabolic phenotype across all 10 evaluated seeds ($f(\text{low}) = 1.000000$). Zero quota failures.
+  * Surviving population consists 100% of the Efficient low-metabolic phenotype across all 10 evaluated seeds. Zero quota failures.
 
 ### TEST-307: Whole-Window Resource-Bound Carrying Capacity Equilibrium
 * **Docstring:** Agent population levels off and establishes equilibrium dictated by available environmental biomass and water, asserting bounded stability across the entire observation window.
@@ -351,10 +353,22 @@ The transition from Version 1.0/1.1 (`agents_params_v1.json`) to Version 2.0 (`a
 
 ---
 
-### 13.2 TEST-306 Relabeling & Contradiction Resolution
+### 13.2 TEST-306 Relabeling, Scientific Boundary & Contradiction Resolution
+- **Scientific Boundary:** Heritable natural selection across generations is not demonstrated in Phase 3. TEST-306 measures differential starvation survival between initial phenotypes under acute caloric famine (low metabolic rate conferring starvation resistance with zero somatic trade-off), not evolutionary adaptation, allele frequency dynamics, or multi-generational selection.
 - **Relabeling:** Formally relabeled in code docstrings, test identifiers, and documentation as `test_306_starvation_survival_selection_for_low_metabolic_rate`.
 - **Contradiction Resolution (4-births / 6-living vs 5-deaths / 3-living):**
   - **4-births / 6-living scenario:** Occurred in an early exploratory calibration where partial food replenishment was active ($\approx 1.0/\text{tick}$). Founders survived, and 2 female agents achieved the reproduction drive threshold ($60.0$) and gave birth to 2 offspring ($4\text{ founders} + 2\text{ offspring} = 6\text{ living}$).
   - **5-deaths / 3-living scenario:** Occurred under the strict famine protocol ($30.0$ binding autotroph biomass without replenishment). All 4 Profligate agents ($m=1.8$) depleted energy and died of starvation, while 1 Efficient agent starved due to initial foraging competition ($8\text{ founders} - 5\text{ deaths} = 3\text{ living}$, all 3 low-metabolic Efficient).
-  - Both outcomes are mathematically and ecologically consistent with the underlying model under differing resource influx regimes. Under the standardized 10-seed famine protocol, low-metabolic agents achieve 100.0% fixation across all 10 independent seeds.
+  - Both outcomes are mathematically and ecologically consistent with the underlying model under differing resource influx regimes. Under the standardized 10-seed famine protocol, low-metabolic agents are the sole survivors across all 10 independent seeds.
+
+---
+
+### 13.3 Version 3.0 Changelog (Phase 3e)
+* **Parameters File:** Created `agents_params_v3.json` with canonical SHA-256 `850c2139bb79a6c2d2b7398b53624f3626920c5ccc7d34c35d76c3de1ab9623c`.
+* **Restoration of v2:** `agents_params_v2.json` restored strictly to its original Phase 3b pinned hash `46b4be4e31e3086dd30e086bf6949e1b1cdd4eb7cf8ffa7eb2a3b2369df8e05a`.
+* **Changes in v3:**
+  1. Added `"is_agent": 1` in `AR_05_REPRODUCE` child entity creation and agent schema to decouple Phase 2 ecosystem basal metabolism (`BR_03`) and starvation (`BR_05`) without touching the frozen Layer 1 substrate.
+  2. Synchronized `thirst_satisfaction` ($50.0$) and `child_base_energy` ($50.0$) to maintain exact rule-to-params parity in `test_rule_constants_match_params_file`.
+  3. Reconciled calibration log and changelog entries.
+
 

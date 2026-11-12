@@ -815,6 +815,80 @@ class TestEcosystemAcceptance(unittest.TestCase):
             self.assertEqual(state_hash_1, GOLDEN_STATE_HASH_365)
             self.assertEqual(journal_hash_1, GOLDEN_JOURNAL_HASH_365)
 
+    # -------------------------------------------------------------------------
+    # TEST-208: Coupled-World Ecosystem Rules (BR_03 & BR_05) Do Not Touch Agents
+    # -------------------------------------------------------------------------
+    def test_208_coupled_world_ecosystem_rules_do_not_touch_agents(self) -> None:
+        """In a coupled world containing both ecosystem organisms and individual agents,
+        BR_03_BASAL_METABOLISM and BR_05_STARVATION_DEATH strictly ignore agents (is_agent == 1)
+        and never modify agent properties or trigger agent mortality.
+        """
+        from genesis.agents.loader import load_agents
+        from tests.test_agents_phase3 import create_test_agent
+
+        world = WorldState(seed=208, journal_dir=self.journal_dir / "coupled")
+        load_ecosystem(world)
+        load_agents(world)
+
+        # Create a herbivore (is_agent=0) in cell (0, 0)
+        h_id = world.entities._next_id
+        world.entities._next_id += 1
+        herbivore = Entity(
+            entity_id=h_id,
+            entity_type="herbivore",
+            created_tick=0,
+            properties={
+                "cell_x": 0,
+                "cell_y": 0,
+                "energy": FixedPoint.from_int(10),
+                "biomass": FixedPoint.from_int(20),
+                "age": 5,
+                "generation": 0,
+                "is_alive": 1,
+                "is_agent": 0,
+            },
+        )
+        world.entities._entities[h_id] = herbivore
+        world.entities._by_type.setdefault("herbivore", []).append(h_id)
+        world.spatial_index.place_entity(h_id, 0, 0)
+
+        # Create an agent in cell (0, 0) with energy 0.0 (which would trigger BR_05 if not decoupled)
+        agent_id = create_test_agent(
+            world,
+            cell_x=0,
+            cell_y=0,
+            sex=0,
+            biomass=40.0,
+            energy=0.0,
+            metabolic_rate=1.0,
+        )
+        agent = world.entities.get_entity(agent_id)
+        self.assertEqual(agent.get_property("is_agent"), 1)
+        initial_agent_biomass = agent.get_property("biomass")
+
+        for _ in range(5):
+            world.advance_tick()
+
+        # Herbivore experienced basal metabolism and starved when energy hit 0
+        h_ent = world.entities.get_entity(h_id)
+        self.assertTrue(h_ent is None or h_ent.get_property("is_alive") == 0)
+
+        # Agent was never touched by BR_03 or BR_05
+        touched_by_br = [
+            r for r in world.event_journal.records
+            if r.payload.get("rule_id") in ("BR_03_BASAL_METABOLISM", "BR_05_STARVATION_DEATH")
+            and agent_id in r.payload.get("entities_touched", [])
+        ]
+        self.assertEqual(
+            len(touched_by_br),
+            0,
+            f"BR_03 or BR_05 illegally touched agent {agent_id}: {touched_by_br}",
+        )
+        # Agent biomass changed solely via AR_01_METABOLISM slough (0.02/tick * 5 ticks = 0.10),
+        # proving BR_03 basal metabolism never applied to the agent.
+        expected_agent_biomass = initial_agent_biomass - FixedPoint.from_decimal_string("0.100000")
+        self.assertEqual(agent.get_property("biomass"), expected_agent_biomass)
+
 
 if __name__ == "__main__":
     unittest.main()

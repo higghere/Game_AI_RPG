@@ -222,8 +222,9 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
         self.assertGreaterEqual(ratio, FixedPoint.from_decimal_string("2.000000"))
 
     def test_settlement_v2_outlier_wanderers(self) -> None:
-        """Two far-away lone wanderers do not change the positive verdict category."""
+        """Two far-away lone wanderers outside the original box (no declared extent) do not change verdict."""
         world = self._create_world()
+        binding = AnalysisBinding()  # no declared extent; uses occupied bounding box
         cluster_agents = []
         for i in range(20):
             cx, cy = i % 3, i // 3
@@ -245,7 +246,7 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
             )
             world.spatial_index.place_entity(ent.id, bx, by)
 
-        # Two distant wanderers at (50, 50) and (60, 60)
+        # Two distant wanderers at (50, 50) and (60, 60), expanding bounding box from (0..17, 0..17) to (0..60, 0..60)
         for wx, wy in [(50, 50), (60, 60)]:
             ent = world.entities.create_entity(
                 "agent", 0,
@@ -260,8 +261,8 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
             sample_history.append({"tick": yr * 365, "agents": s_agents})
 
         world.clock._tick = 1825
-        verdict = evaluate_settlement(world, self.binding, sample_history, params=self.params_v2)
-        self.assertTrue(verdict["passed"], f"Outlier wanderers caused unexpected failure: {verdict.get('failure_reasons')}")
+        verdict = evaluate_settlement(world, binding, sample_history, params=self.params_v2)
+        self.assertTrue(verdict["passed"], f"Outlier wanderers without declared extent caused unexpected failure: {verdict.get('failure_reasons')}")
 
     # =========================================================================
     # 3. Negative Controls (Must Fail)
@@ -517,6 +518,55 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
         ratio = FixedPoint.from_decimal_string(verdict["sub_criteria"]["effect_size_floor"]["observed_enrichment_ratio"])
         self.assertLess(ratio, FixedPoint.from_decimal_string("2.000000"))
 
+    def test_settlement_v2_negative_gentle_oasis_congregation(self) -> None:
+        """Agents distributed according to a gentle (5x) resource oasis fail the resource-weighted null."""
+        world = self._create_world()
+        binding = AnalysisBinding(world_extent=(0, 0, 19, 19), resource_landscape_property="soil_water")
+
+        # Gentle gradient: oasis at (0..4, 0..4) with weight 5, rest with weight 1
+        weights = []
+        cells = []
+        for x in range(20):
+            for y in range(20):
+                w = 5 if (0 <= x <= 4 and 0 <= y <= 4) else 1
+                res_ent = world.entities.create_entity(
+                    "agent", 0,
+                    {"cell_x": x, "cell_y": y, "is_alive": 0, "soil_water": w},
+                    world.schema_registry
+                )
+                world.spatial_index.place_entity(res_ent.id, x, y)
+                weights.append(w)
+                cells.append((x, y))
+
+        rng = derive_analysis_stream(777, "gentle_oasis_sample", 0)
+        cum_weights = []
+        total = 0
+        for w in weights:
+            total += w
+            cum_weights.append(total)
+
+        import bisect
+        agents = []
+        for i in range(100):
+            r = rng.next_int_range(1, total)
+            idx = bisect.bisect_left(cum_weights, r)
+            gx, gy = cells[idx]
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": gx, "cell_y": gy, "is_alive": 1, "birth_cell_x": gx, "birth_cell_y": gy, "soil_water": weights[idx]},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, gx, gy)
+            agents.append({"id": ent.id, "x": gx, "y": gy})
+
+        sh = [{"tick": yr * 365, "agents": [{"id": a["id"], "x": a["x"], "y": a["y"]} for a in agents]} for yr in range(5)]
+        world.clock._tick = 1825
+        verdict = evaluate_settlement(world, binding, sh, params=self.params_v2)
+        self.assertFalse(verdict["passed"])
+        # Fails the resource-weighted null specifically (p > 0.01) despite failing uniform null (p <= 0.01)
+        res_p = FixedPoint.from_decimal_string(verdict["sub_criteria"]["scan_statistic_significance"]["resource_weighted_null_p_value"])
+        self.assertGreater(res_p, FixedPoint.from_decimal_string("0.010000"))
+
     # =========================================================================
     # 4. Boundary Tests
     # =========================================================================
@@ -542,6 +592,96 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
         world.entities._entities[last_id].is_active = False
         verdict7 = evaluate_settlement(world, self.binding, params=self.params_v2)
         self.assertFalse(verdict7["sub_criteria"]["spatial_cluster_size"]["passed"])
+
+    def test_settlement_v2_boundary_enrichment_floor_just_below(self) -> None:
+        """Boundary test: cluster with realized enrichment ratio just below 2.0x (1.97x) fails floor."""
+        world = self._create_world()
+        binding = AnalysisBinding(world_extent=(0, 0, 19, 19))
+        cluster_agents = []
+        for i in range(24):
+            cx, cy = i % 2, i // 2
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": cx, "cell_y": cy, "is_alive": 1, "birth_cell_x": cx, "birth_cell_y": cy},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, cx, cy)
+            cluster_agents.append({"id": ent.id, "x": cx, "y": cy})
+
+        for i in range(20):
+            bx = 4 + (i % 5) * 3
+            by = 4 + (i // 5) * 3
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": bx, "cell_y": by, "is_alive": 1, "birth_cell_x": bx, "birth_cell_y": by},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, bx, by)
+
+        sample_history = []
+        for yr in range(5):
+            s_agents = [{"id": a["id"], "x": a["x"], "y": a["y"]} for a in cluster_agents]
+            sample_history.append({"tick": yr * 365, "agents": s_agents})
+
+        world.clock._tick = 1825
+        verdict = evaluate_settlement(world, binding, sample_history, params=self.params_v2)
+        self.assertFalse(verdict["passed"])
+        self.assertFalse(verdict["sub_criteria"]["effect_size_floor"]["passed"])
+        ratio = FixedPoint.from_decimal_string(verdict["sub_criteria"]["effect_size_floor"]["observed_enrichment_ratio"])
+        self.assertLess(ratio, FixedPoint.from_decimal_string("2.000000"))
+        self.assertGreater(ratio, FixedPoint.from_decimal_string("1.900000"))
+
+    def test_settlement_v2_boundary_p_rank_just_above_alpha(self) -> None:
+        """Boundary test: cluster size with p-rank just exceeding alpha (p > 0.01) fails significance."""
+        world = self._create_world()
+        binding = AnalysisBinding(world_extent=(0, 0, 19, 19))
+        # 3 agents in 4x4 with 97 background agents yields obs_max=3, p=0.019900 > 0.010000
+        cluster = []
+        for i in range(3):
+            cx, cy = i % 4, i // 4
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": cx, "cell_y": cy, "is_alive": 1, "birth_cell_x": cx, "birth_cell_y": cy},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, cx, cy)
+            cluster.append({"id": ent.id, "x": cx, "y": cy})
+
+        for i in range(97):
+            bx = 5 + (i % 15)
+            by = 5 + (i // 15) * 2
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": bx, "cell_y": by, "is_alive": 1, "birth_cell_x": bx, "birth_cell_y": by},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, bx, by)
+
+        sh = [{"tick": yr * 365, "agents": [{"id": a["id"], "x": a["x"], "y": a["y"]} for a in cluster]} for yr in range(5)]
+        world.clock._tick = 1825
+        verdict = evaluate_settlement(world, binding, sh, params=self.params_v2)
+        self.assertFalse(verdict["passed"])
+        self.assertFalse(verdict["sub_criteria"]["scan_statistic_significance"]["passed"])
+        p_val = FixedPoint.from_decimal_string(verdict["sub_criteria"]["scan_statistic_significance"]["uniform_null_p_value"])
+        self.assertGreater(p_val, FixedPoint.from_decimal_string("0.010000"))
+
+    def test_settlement_v2_boundary_scan_radius(self) -> None:
+        """Boundary test: cluster spanning outside R=2 window (7x7 dispersed vs 5x5 compact) drops window count."""
+        world = self._create_world()
+        binding = AnalysisBinding(world_extent=(0, 0, 19, 19))
+
+        # Compact 5x5 cluster (all 25 in single R=2 window)
+        coords_compact = [(i % 5, i // 5) for i in range(25)]
+        sat_compact = _build_summed_area_table(coords_compact, (0, 0, 19, 19))
+        max_compact, _ = _scan_all_windows(sat_compact, (0, 0, 19, 19), 2)
+        self.assertEqual(max_compact, 25)
+
+        # Dispersed 7x7 cluster (outside R=2 window; spans 0..6, 0..6)
+        coords_dispersed = [((i % 5) * 6 // 4, (i // 5) * 6 // 4) for i in range(25)]
+        sat_dispersed = _build_summed_area_table(coords_dispersed, (0, 0, 19, 19))
+        max_dispersed, _ = _scan_all_windows(sat_dispersed, (0, 0, 19, 19), 2)
+        self.assertLess(max_dispersed, 25)
+        self.assertEqual(max_dispersed, 16)
 
     # =========================================================================
     # 5. Calibration Tests (FPR <= 3%, Power >= 95%)

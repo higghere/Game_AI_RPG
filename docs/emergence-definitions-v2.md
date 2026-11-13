@@ -200,4 +200,13 @@ The test suite evaluates the following synthetic control worlds:
 | `immigrants_only` | 20 | Dense persistent cluster, 0% native births | **FAIL** | Fails generational anchoring ($0\% < 30\%$) |
 | `undersized_cluster` | 6 | Dense persistent cluster of 6 agents | **FAIL** | Fails minimum size ($6 < 8$) |
 | `oasis_resource_weighted_congregation`| 50 | Clustered on high-resource patch | **FAIL** | Fails resource-weighted oasis null ($p > 0.01$) |
-| `elongated_2x12_ribbon` | 24 | Dense linear ribbon of $2 \times 12$ cells | **REPORT** | Empirical diagnostic evaluated without tuning |
+| `gentle_oasis_congregation` | 100 | Agents tracking 5x gentle oasis gradient | **FAIL** | Fails resource-weighted oasis null ($p > 0.01$) |
+
+---
+
+## 6. Limitations & Known False Negatives
+
+1. **Elongated / Ribbon-Shaped Settlements (Known False Negative):**
+   - The scan statistic evaluates $(2R+1) \times (2R+1)$ square windows ($5 \times 5$ cells for $R=2$). A dense, highly nucleated settlement configured as an elongated strip (e.g. $2 \times 12$ cells along a riverbank, road, or canyon) achieves statistical significance ($W_{\max} = 10 > P_{99} = 7$, $p \le 0.01$), but the square window captures only a fraction of its total population ($\le 10$ agents out of 24).
+   - Consequently, the observed enrichment ratio is $1.974333\times$, narrowly failing the isotropic $2.000000\times$ effect-size floor.
+   - This is documented as a known false negative of isotropic square scan windows; non-isotropic / directional kernels are left for future parameter sets to preserve the low computational complexity ($O(W \cdot H)$ integer prefix sums) and strict family-wise error rate control of v2.

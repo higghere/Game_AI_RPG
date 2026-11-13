@@ -1,0 +1,62 @@
+{
+  "phenomenon": "settlement",
+  "params_version": "v2",
+  "params_sha256": "ee4f718cbe4f87421e778e043e0d0c015c6bb7eca0db2e0e0b922464ebeb628f",
+  "passed": false,
+  "candidate_id": "settlement_cand_9814",
+  "evaluated_ticks": {
+    "start_tick": 34675,
+    "end_tick": 36500,
+    "years": 5
+  },
+  "sub_criteria": {
+    "scan_statistic_significance": {
+      "passed": false,
+      "observed_max_window_count": 79,
+      "uniform_null_p_value": "1.000000",
+      "resource_weighted_null_p_value": "1.000000",
+      "uniform_null_99th_percentile": 98,
+      "resource_weighted_null_99th_percentile": 97,
+      "annual_samples_evaluated": 5,
+      "annual_samples_passed": 0,
+      "k_permutations": 200
+    },
+    "effect_size_floor": {
+      "passed": false,
+      "observed_enrichment_ratio": "0.906743",
+      "threshold_enrichment_ratio": "2.000000",
+      "larger_null_mean": "87.125000"
+    },
+    "spatial_cluster_size": {
+      "passed": true,
+      "observed": 156,
+      "threshold": 8,
+      "margin": 148
+    },
+    "temporal_persistence": {
+      "passed": false,
+      "observed_min_jaccard": "0.287610",
+      "threshold_min_jaccard": "0.500000",
+      "observed_footprint_jaccard_informational": "0.781250",
+      "observed_max_drift": 1,
+      "threshold_max_drift": 2
+    },
+    "generational_anchoring": {
+      "passed": true,
+      "observed_born_in_count": 156,
+      "total_members": 156,
+      "observed_fraction": "1.000000",
+      "threshold_fraction": "0.300000"
+    },
+    "stockpile_enrichment": {
+      "status": "NOT_ASSESSED",
+      "note": "stockpile not assessed",
+      "passed": true
+    }
+  },
+  "failure_reasons": [
+    "Scan statistic significance hurdle failed (p <= 0.010000 required at all 5 annual samples; passed 0)",
+    "Effect-size floor failed: observed enrichment 0.906743 < required 2.000000x null expectation",
+    "Temporal persistence failed: min member Jaccard 0.287610 < 0.500000 or max drift 1 > 2"
+  ]
+}

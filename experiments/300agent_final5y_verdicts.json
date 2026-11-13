@@ -1,0 +1,86 @@
+{
+  "settlement": {
+    "phenomenon": "settlement",
+    "params_version": "v1",
+    "params_sha256": "9dc8c96b152a63d118070a2c15dbea0806522a1a0e391477a2b895ea55548591",
+    "passed": false,
+    "candidate_id": "settlement_cand_29909",
+    "evaluated_ticks": {
+      "start_tick": 34675,
+      "end_tick": 36500,
+      "years": 5
+    },
+    "sub_criteria": {
+      "spatial_cluster_size": {
+        "passed": true,
+        "observed": 482,
+        "threshold": 8,
+        "margin": 474
+      },
+      "temporal_persistence": {
+        "passed": false,
+        "observed_min_jaccard": "0.333333",
+        "threshold_min_jaccard": "0.500000",
+        "observed_max_drift": 1,
+        "threshold_max_drift": 2
+      },
+      "generational_anchoring": {
+        "passed": true,
+        "observed_born_in_count": 481,
+        "total_members": 482,
+        "observed_fraction": "0.997925",
+        "threshold_fraction": "0.300000"
+      },
+      "significance_uniform_null": {
+        "passed": true,
+        "null_model": "spatial_uniform_permutation",
+        "k_permutations": 200,
+        "observed_statistic": 482,
+        "null_99th_percentile": 470
+      },
+      "significance_resource_weighted_null": {
+        "passed": true,
+        "null_model": "spatial_resource_weighted_permutation",
+        "k_permutations": 200,
+        "observed_statistic": 482,
+        "null_99th_percentile": 470
+      },
+      "stockpile_enrichment": {
+        "status": "NOT_ASSESSED",
+        "note": "stockpile not assessed",
+        "passed": true
+      }
+    },
+    "failure_reasons": [
+      "Temporal persistence failed: min Jaccard 0.333333 < 0.500000 or max drift 1 > 2"
+    ]
+  },
+  "group": {
+    "phenomenon": "group",
+    "status": "NOT_APPLICABLE",
+    "passed": null,
+    "candidate_id": "none",
+    "evaluated_ticks": {
+      "start_tick": 34675,
+      "end_tick": 36500,
+      "years": 5
+    },
+    "reason": "Phase 3 agents have no trade, tribute, or political cooperation edges/events. Interaction graph is empty.",
+    "sub_criteria": {},
+    "failure_reasons": []
+  },
+  "cultural_spread": {
+    "phenomenon": "cultural_spread",
+    "status": "NOT_APPLICABLE",
+    "passed": null,
+    "candidate_id": "none",
+    "evaluated_ticks": {
+      "start_tick": 34675,
+      "end_tick": 36500,
+      "years": 5
+    },
+    "reason": "Phase 3 agents have no memes, practices, or adoption events.",
+    "sub_criteria": {},
+    "failure_reasons": []
+  }
+}

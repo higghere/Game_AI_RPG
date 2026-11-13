@@ -852,28 +852,61 @@ class TestEcosystemAcceptance(unittest.TestCase):
         world.entities._by_type.setdefault("herbivore", []).append(h_id)
         world.spatial_index.place_entity(h_id, 0, 0)
 
-        # Create an agent in cell (0, 0) with energy 0.0 (which would trigger BR_05 if not decoupled)
+        # Create an agent in cell (0, 0) with positive energy and hunger
         agent_id = create_test_agent(
             world,
             cell_x=0,
             cell_y=0,
             sex=0,
             biomass=40.0,
-            energy=0.0,
+            energy=100.0,
             metabolic_rate=1.0,
         )
         agent = world.entities.get_entity(agent_id)
         self.assertEqual(agent.get_property("is_agent"), 1)
+        initial_agent_energy = agent.get_property("energy")
         initial_agent_biomass = agent.get_property("biomass")
+        initial_agent_hunger = agent.get_property("hunger")
+        meta_rate = agent.get_property("metabolic_rate")
 
-        for _ in range(5):
+        # Run for 20 ticks
+        ticks_to_run = 20
+        for _ in range(ticks_to_run):
             world.advance_tick()
 
-        # Herbivore experienced basal metabolism and starved when energy hit 0
+        # 1. Agent survives at least 20 ticks with positive energy, hunger, and biomass
+        self.assertEqual(agent.get_property("is_alive"), 1)
+        self.assertGreater(agent.get_property("energy"), FixedPoint.from_int(0))
+        self.assertGreater(agent.get_property("hunger"), FixedPoint.from_int(0))
+        self.assertGreater(agent.get_property("biomass"), FixedPoint.from_int(0))
+
+        # 2. Agent energy falls strictly at AR_01's metabolic_rate (1.000000 / tick)
+        expected_agent_energy = initial_agent_energy - (meta_rate * FixedPoint.from_int(ticks_to_run))
+        self.assertEqual(agent.get_property("energy"), expected_agent_energy)
+        self.assertEqual(agent.get_property("energy"), FixedPoint.from_decimal_string("80.000000"))
+
+        # Agent hunger increases strictly at AR_01's metabolic_rate (+1.000000 / tick)
+        expected_agent_hunger = initial_agent_hunger + (meta_rate * FixedPoint.from_int(ticks_to_run))
+        self.assertEqual(agent.get_property("hunger"), expected_agent_hunger)
+        self.assertEqual(agent.get_property("hunger"), FixedPoint.from_decimal_string("20.000000"))
+
+        # Agent biomass falls strictly at AR_01's slough rate (0.100000 / tick)
+        expected_agent_biomass = initial_agent_biomass - (
+            FixedPoint.from_decimal_string("0.100000") * FixedPoint.from_int(ticks_to_run)
+        )
+        self.assertEqual(agent.get_property("biomass"), expected_agent_biomass)
+        self.assertEqual(agent.get_property("biomass"), FixedPoint.from_decimal_string("38.000000"))
+
+        # 3. Herbivore experienced basal metabolism and starved when energy hit 0
         h_ent = world.entities.get_entity(h_id)
         self.assertTrue(h_ent is None or h_ent.get_property("is_alive") == 0)
+        h_destroyed = [
+            r for r in world.event_journal.records
+            if r.event_type == "entity_destroyed" and r.payload.get("entity_id") == str(h_id)
+        ]
+        self.assertEqual(len(h_destroyed), 1)
 
-        # Agent was never touched by BR_03 or BR_05
+        # 4. Agent was never touched by BR_03 or BR_05
         touched_by_br = [
             r for r in world.event_journal.records
             if r.payload.get("rule_id") in ("BR_03_BASAL_METABOLISM", "BR_05_STARVATION_DEATH")
@@ -884,10 +917,15 @@ class TestEcosystemAcceptance(unittest.TestCase):
             0,
             f"BR_03 or BR_05 illegally touched agent {agent_id}: {touched_by_br}",
         )
-        # Agent biomass changed solely via AR_01_METABOLISM slough (0.02/tick * 5 ticks = 0.10),
-        # proving BR_03 basal metabolism never applied to the agent.
-        expected_agent_biomass = initial_agent_biomass - FixedPoint.from_decimal_string("0.100000")
-        self.assertEqual(agent.get_property("biomass"), expected_agent_biomass)
+        agent_destroyed = [
+            r for r in world.event_journal.records
+            if r.event_type == "entity_destroyed" and r.payload.get("entity_id") == str(agent_id)
+        ]
+        self.assertEqual(
+            len(agent_destroyed),
+            0,
+            f"Agent {agent_id} illegally recorded entity_destroyed in journal: {agent_destroyed}",
+        )
 
 
 if __name__ == "__main__":

@@ -94,6 +94,18 @@
     {
       "change": "Added is_agent INT64 property to agent schema (default 1) and ecosystem schemas (default 0) to decouple Layer 2 rules without modifying substrate",
       "motivation": "Motivated by test results: Reverted entities.py modification and decoupled ecosystem rules BR_03 and BR_05 from agents using pure declarative schema properties"
+    },
+    {
+      "change": "Increased drink thirst_satisfaction from 40.000000 to 50.000000 in actions.drink",
+      "motivation": "Motivated by test results: Aligned parameters with AR_03_DRINK rule effect to satisfy rule parity tests and prevent premature dehydration under high metabolic rate"
+    },
+    {
+      "change": "Increased reproduction child_base_energy from 40.000000 to 50.000000 in actions.reproduction",
+      "motivation": "Motivated by test results: Aligned parameters with AR_05_REPRODUCE rule effect where both parents contribute 25.0 energy to yield 50.0 base energy for offspring"
+    },
+    {
+      "change": "Bumped version to v3 with is_agent schema property and complete parity disclosures",
+      "motivation": "Motivated by test results: Frozen specification bumped to v3 to isolate post-approval changes and restore v2 to original Phase 3b pin"
     }
   ],
   "description": "Frozen pre-registered parameter specification for individual autonomous agents in GENESIS Alpha.",

@@ -222,9 +222,9 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
         self.assertGreaterEqual(ratio, FixedPoint.from_decimal_string("2.000000"))
 
     def test_settlement_v2_outlier_wanderers(self) -> None:
-        """Two far-away lone wanderers outside the original box (opt-in bounding box extent) do not change verdict."""
+        """Two far-away lone wanderers outside the original box (declared extent) do not change verdict."""
         world = self._create_world()
-        binding = AnalysisBinding(allow_bounding_box_extent=True)  # explicit opt-in to bounding box fallback
+        binding = AnalysisBinding(world_extent=(0, 0, 60, 60))
         cluster_agents = []
         for i in range(20):
             cx, cy = i % 3, i // 3
@@ -246,7 +246,7 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
             )
             world.spatial_index.place_entity(ent.id, bx, by)
 
-        # Two distant wanderers at (50, 50) and (60, 60), expanding bounding box from (0..17, 0..17) to (0..60, 0..60)
+        # Two distant wanderers at (50, 50) and (60, 60)
         for wx, wy in [(50, 50), (60, 60)]:
             ent = world.entities.create_entity(
                 "agent", 0,
@@ -262,7 +262,63 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
 
         world.clock._tick = 1825
         verdict = evaluate_settlement(world, binding, sample_history, params=self.params_v2)
-        self.assertTrue(verdict["passed"], f"Outlier wanderers without declared extent caused unexpected failure: {verdict.get('failure_reasons')}")
+        self.assertTrue(verdict["passed"], f"Outlier wanderers with declared extent caused unexpected failure: {verdict.get('failure_reasons')}")
+        self.assertEqual(verdict.get("extent_source"), "declared_world_extent")
+
+    def test_settlement_v2_opt_in_bounding_box_diagnostic_only(self) -> None:
+        """Opt-in allow_bounding_box_extent carries extent_source='occupied_bounding_box' and never returns passed: True."""
+        world = self._create_world()
+        # Dense cluster setup that satisfies all quantitative sub-criteria
+        cluster_agents = []
+        for i in range(20):
+            cx, cy = i % 3, i // 3
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": cx, "cell_y": cy, "is_alive": 1, "birth_cell_x": cx, "birth_cell_y": cy},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, cx, cy)
+            cluster_agents.append({"id": ent.id, "x": cx, "y": cy})
+
+        for i in range(20):
+            bx = 5 + (i % 5) * 3
+            by = 5 + (i // 5) * 3
+            ent = world.entities.create_entity(
+                "agent", 0,
+                {"cell_x": bx, "cell_y": by, "is_alive": 1, "birth_cell_x": bx, "birth_cell_y": by},
+                world.schema_registry
+            )
+            world.spatial_index.place_entity(ent.id, bx, by)
+
+        sample_history = []
+        for yr in range(5):
+            s_agents = [{"id": a["id"], "x": a["x"], "y": a["y"]} for a in cluster_agents]
+            sample_history.append({"tick": yr * 365, "agents": s_agents})
+
+        world.clock._tick = 1825
+
+        # 1. Opt-in allow_bounding_box_extent without declared extent
+        binding_opt_in = AnalysisBinding(allow_bounding_box_extent=True)
+        verdict_bbox = evaluate_settlement(world, binding_opt_in, sample_history, params=self.params_v2)
+
+        self.assertEqual(verdict_bbox.get("extent_source"), "occupied_bounding_box")
+        self.assertIsNot(verdict_bbox.get("passed"), True, "allow_bounding_box_extent must NEVER return passed: True")
+        self.assertIsNone(verdict_bbox.get("passed"))
+        self.assertEqual(verdict_bbox.get("status"), "NOT_ASSESSED")
+        self.assertIn("diagnostic only", verdict_bbox.get("reason", "").lower())
+        # Diagnostic sub-criteria must still be computed and reported
+        self.assertTrue(verdict_bbox["sub_criteria"]["scan_statistic_significance"]["passed"])
+        self.assertTrue(verdict_bbox["sub_criteria"]["effect_size_floor"]["passed"])
+        self.assertTrue(verdict_bbox["sub_criteria"]["spatial_cluster_size"]["passed"])
+        self.assertTrue(verdict_bbox["sub_criteria"]["temporal_persistence"]["passed"])
+        self.assertTrue(verdict_bbox["sub_criteria"]["generational_anchoring"]["passed"])
+
+        # 2. In contrast, certified emergence with declared world_extent returns passed: True
+        binding_certified = AnalysisBinding(world_extent=(0, 0, 19, 19))
+        verdict_cert = evaluate_settlement(world, binding_certified, sample_history, params=self.params_v2)
+        self.assertEqual(verdict_cert.get("extent_source"), "declared_world_extent")
+        self.assertTrue(verdict_cert.get("passed"))
+        self.assertEqual(verdict_cert.get("status"), "ASSESSED")
 
     # =========================================================================
     # 3. Negative Controls (Must Fail)
@@ -338,8 +394,13 @@ class TestEmergenceDefinitionsV2(unittest.TestCase):
         self.assertFalse(verdict_declared["sub_criteria"]["scan_statistic_significance"]["passed"])
         self.assertFalse(verdict_declared["sub_criteria"]["effect_size_floor"]["passed"])
 
-        # 3. Explicit opt-in bounding-box fallback is also accepted by the control
-        self.assertIn(verdict_no_extent.get("status") if verdict_no_extent.get("passed") is None else "FAIL", ["NOT_ASSESSED", "FAIL"])
+        # 3. Explicit opt-in bounding-box fallback carries extent_source='occupied_bounding_box' and never returns passed: True
+        binding_bbox = AnalysisBinding(allow_bounding_box_extent=True)
+        verdict_bbox = evaluate_settlement(world, binding_bbox, sample_history, params=self.params_v2)
+        self.assertEqual(verdict_bbox.get("extent_source"), "occupied_bounding_box")
+        self.assertIsNot(verdict_bbox.get("passed"), True)
+        self.assertEqual(verdict_bbox.get("status"), "NOT_ASSESSED")
+        self.assertIsNone(verdict_bbox.get("passed"))
 
     def test_settlement_v2_negative_regular_lattice(self) -> None:
         """Regular over-dispersed lattice (1 agent per cell evenly spaced) fails settlement."""

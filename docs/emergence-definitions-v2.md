@@ -49,13 +49,15 @@ A statistical test that is satisfied when **"everybody is everywhere"** cannot d
 
 ### 3.1 Dimensional Units & Spatial Scale
 - All spatial distances and radii, including $R = \text{scan\_window\_radius\_cells}$, are defined in discrete integer **grid cell units**.
-- The physical size of each cell is declared in the binding via `AnalysisBinding.cell_size` (FixedPoint) or defaults to unit grid cells.
+- Agent bindings **must declare** `world_extent` and `cell_size`:
+  - `AnalysisBinding.cell_size` (`FixedPoint`): Declared physical cell dimension.
+  - `AnalysisBinding.world_extent` (`Tuple[int, int, int, int]`): Declared physical bounds $(X_{\min}, Y_{\min}, X_{\max}, Y_{\max})$ of the simulation grid.
 - A scan window with radius $R = 2$ defines a $(2R+1) \times (2R+1) = 5 \times 5$ cell neighborhood.
 
 ### 3.2 State & Journal Inputs
 1. **Active Living Agents:** Queried at annual sample ticks $t_k \in \{t_{\text{end}} - 4\Delta t, \dots, t_{\text{end}}\}$ where $\Delta t = \text{sample\_interval\_ticks} = 365$ ticks ($1$ year, $5$ annual samples total).
 2. **Spatial Grid Coordinates:** Entity properties `cell_x` and `cell_y` for all active agents.
-3. **Declared Landscape Extent:** Queried from `binding.world_extent` as $(X_{\min}, Y_{\min}, X_{\max}, Y_{\max})$. If undeclared (None), falls back to the occupied bounding box of all living agents at that sample.
+3. **Declared Landscape Extent:** Agent bindings must declare `world_extent` as $(X_{\min}, Y_{\min}, X_{\max}, Y_{\max})$. If undeclared (`None`), the spatial null permutation extent is undefined and the verdict returns `"status": "NOT_ASSESSED"` (`passed: None`, `extent_source: "none"`). An explicit opt-in diagnostic flag (`AnalysisBinding.allow_bounding_box_extent = True`) falls back to the occupied bounding box with `extent_source: "occupied_bounding_box"`; this opt-in fallback is strictly diagnostic and **never returns `passed: True`** (returns `"status": "NOT_ASSESSED"`, `passed: None`). Certified emergence requires a declared `world_extent` (`extent_source: "declared_world_extent"`).
 4. **Birth Records:** Append-only event journal records (`entity_spawned`, `entity_created`, `agent_born`, `reproduction`) containing `(entity_id, tick, cell_x, cell_y)`.
 5. **Resource Landscape (Optional):** Local cell resource pool balances or entity properties (`resource_landscape_property`).
 6. **Stockpile Levels (Optional):** Local cell stockpile resources (`stockpile_resource_property`).
@@ -190,7 +192,7 @@ The test suite evaluates the following synthetic control worlds:
 | :--- | :--- | :--- | :--- | :--- |
 | `dense_cluster_baseline` | 16 | Dense $4 \times 4$ cluster, 5-yr persistent, 50% native | **PASS** | — |
 | `dense_cluster_100_agents`| 100 | Dense cluster at $(0,0)$ on $20 \times 20$ grid | **PASS** | — |
-| `dense_cluster_300_agents`| 300 | Dense cluster at $(0,0)$ on $30 \times 30$ grid | **PASS** | — |
+| `dense_cluster_300_agents`| 300 | Dense cluster at $(0,0)$ on $30 \times 30$ grid (or $35 \times 35$ constant-density grid) | **PASS** | — |
 | `just_above_enrichment_floor` | 50 | Cluster with enrichment ratio $\approx 2.1\times$ | **PASS** | — |
 | `outlier_wanderers_present` | 52 | Dense cluster (50) + 2 distant wanderers | **PASS** | Outliers do not alter verdict category |
 | `saturated_uniform_random` | 300 | Uniform random dispersal, persistent members | **FAIL** | Fails scan significance and enrichment floor |
@@ -214,7 +216,7 @@ The test suite evaluates the following synthetic control worlds:
      - *Background Density Multiple:* Seeding a $5 \times 5$ window with $3\times$ the spatially uniform expected count $\lambda_{\text{bg}} = N \cdot \frac{25}{\text{Area}}$ (e.g. at $N=100$ on $20 \times 20$, $\lambda_{\text{bg}} = 6.25$, so $3\lambda_{\text{bg}} \approx 19$ agents).
      - *Ratio to Null Maximum Mean:* The test statistic's enrichment ratio is defined as $\frac{W_{\max}^{\text{obs}}}{\max(\bar{W}_{\text{unif}}, \bar{W}_{\text{res}})}$, where $\bar{W}_{\text{unif}}$ is the mean of the **maximum window count across the entire grid** over $K=200$ null permutations.
      - Because extreme Poisson-binomial spatial fluctuations across a multi-hundred cell grid produce maximum window counts substantially higher than the spatial average (for $N=100$, $\bar{W}_{\max}^{\text{null}} \approx 10.2$, whereas average window count is only $6.25$), an observed window count of $19$ agents yields an observed enrichment ratio of $\frac{19}{10.2} \approx 1.86 < 2.0$. It thus fails the effect-size floor ($2.0\times$), despite clearing the significance rank ($p \le 0.01$).
-     - At $N=300$ on $30 \times 30$, expected background count per window is $\approx 8.33$, so $3\times$ seeding places $\approx 25$ agents; however, uniform null maximums average $\approx 15.6$, yielding an enrichment ratio of $\frac{25}{15.6} \approx 1.60 < 2.0$, also failing the effect-size floor.
+     - At $N=300$, whether evaluated on a compact $30 \times 30$ grid ($\text{Area} = 900$, $\lambda_{\text{bg}} \approx 8.33$, $3\lambda_{\text{bg}} \approx 25$ agents, $\bar{W}_{\max}^{\text{null}} \approx 15.6 \implies \text{ratio} \approx 1.60 < 2.0$) or on a constant-density $35 \times 35$ grid ($\text{Area} = 1225$, density $\rho = 0.245 \approx 0.25$ matching $N=100$ on $20 \times 20$, $\lambda_{\text{bg}} \approx 6.12$, $3\lambda_{\text{bg}} \approx 18\text{--}19$ agents, $\bar{W}_{\max}^{\text{null}} \approx 14.8 \implies \text{ratio} \approx 1.24 < 2.0$), the observed window count falls below the $2.000000\times$ floor over the null maximum expectation, producing **$0\%$ power** in both grid configurations.
    - **Limitation Statement:** Under the frozen v2 parameter set ($\text{min\_enrichment\_ratio} = 2.000000$), reliable detection ($\ge 95\%$ power) requires roughly **$5\times$ background density** at $N=100\text{--}300$ (e.g., $N=100$ at $5\times \implies 100\%$ power; $N=300$ at $5\times \implies 100\%$ power). In accordance with instructions, **no thresholds are changed**; this behavior is formally documented as a conservative sensitivity floor of the v2 metric.
 
 2. **Elongated / Ribbon-Shaped Settlements (Known False Negative):**

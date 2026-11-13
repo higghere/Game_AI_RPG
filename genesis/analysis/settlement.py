@@ -522,7 +522,9 @@ def evaluate_settlement_v2(
     allow_bbox = getattr(binding, "allow_bounding_box_extent", False)
     if binding.world_extent is not None:
         grid_extent = binding.world_extent
+        extent_source = "declared_world_extent"
     elif allow_bbox:
+        extent_source = "occupied_bounding_box"
         if living_agents:
             grid_extent = (
                 min(a["x"] for a in living_agents),
@@ -540,6 +542,7 @@ def evaluate_settlement_v2(
             "params_sha256": FROZEN_PARAMS_V2_HASH,
             "status": "NOT_ASSESSED",
             "passed": None,
+            "extent_source": "none",
             "candidate_id": "none",
             "evaluated_ticks": {
                 "start_tick": start_tick,
@@ -889,11 +892,29 @@ def evaluate_settlement_v2(
         and enrichment_passed
     )
 
-    return {
+    verdict_status = "ASSESSED"
+    verdict_passed: Optional[bool] = overall_passed
+    verdict_reason: Optional[str] = None
+
+    if extent_source == "occupied_bounding_box":
+        # allow_bounding_box_extent is diagnostic only and must never return passed: True
+        if overall_passed:
+            verdict_status = "NOT_ASSESSED"
+            verdict_passed = None
+            verdict_reason = (
+                "allow_bounding_box_extent is diagnostic only; certified emergence requires declared world_extent on AnalysisBinding"
+            )
+            failure_reasons.append(
+                "Occupied bounding box extent fallback cannot certify emergence (declared world_extent required)"
+            )
+
+    verdict: Dict[str, Any] = {
         "phenomenon": "settlement",
         "params_version": "v2",
         "params_sha256": FROZEN_PARAMS_V2_HASH,
-        "passed": overall_passed,
+        "status": verdict_status,
+        "passed": verdict_passed,
+        "extent_source": extent_source,
         "candidate_id": candidate_id,
         "evaluated_ticks": {
             "start_tick": start_tick,
@@ -903,6 +924,10 @@ def evaluate_settlement_v2(
         "sub_criteria": sub_criteria,
         "failure_reasons": failure_reasons,
     }
+    if verdict_reason is not None:
+        verdict["reason"] = verdict_reason
+
+    return verdict
 
 
 def evaluate_settlement(

@@ -1,0 +1,112 @@
+{
+  "calibration_targets": {
+    "false_positive_rate_max": "0.030000",
+    "power_min_at_3x": "0.950000",
+    "power_test_worlds_count": 100,
+    "uniform_null_worlds_count": 200
+  },
+  "changelog": [
+    {
+      "change": "Replaced largest-connected-component significance statistic with 2D spatial scan statistic (max count over (2R+1)x(2R+1) windows via summed-area table) evaluated with exact empirical p = (1 + sum(null >= obs)) / (K + 1) <= 0.01 at every annual sample in the persistence window against both uniform and resource-weighted nulls",
+      "motivation": "Motivated by simulation results: yes (Phase 3 300-agent run, v1 passed a uniformly spread population because the largest connected component spanned the entire map)"
+    },
+    {
+      "change": "Added min_enrichment_ratio (2.000000) effect-size floor comparing observed max window count against the larger of the two null means (uniform and resource-weighted)",
+      "motivation": "Motivated by simulation results: yes (prevents large populations with tiny density fluctuations from triggering statistical significance without true demographic aggregation)"
+    },
+    {
+      "change": "Maintained v1 member-Jaccard rule (min_jaccard_similarity 0.500000) and centroid drift (max_centroid_drift_cells 2) as required gating persistence criteria; added footprint Jaccard as informational metric. Consecutive annual overlap measures year-to-year continuity and does not preclude a settlement outliving its founders",
+      "motivation": "Maintains strict continuity requirements for social and demographic cohort retention across consecutive annual samples"
+    },
+    {
+      "change": "Configured null spatial extent to use binding declared world extent when available, falling back to occupied bounding box",
+      "motivation": "Ensures spatial null permutations sample over the true physical landscape when known, preventing outlier wanderers from artificially diluting the null domain"
+    },
+    {
+      "change": "Pre-registered calibration targets (FPR <= 3% across 200 uniform worlds, statistical power >= 95% at 3x enrichment for N=100 and N=300) and negative/positive control worlds list",
+      "motivation": "Pre-registers formal falsification benchmarks and control regimes prior to implementation"
+    },
+    {
+      "change": "Documented scan window radius R as cell units (scan_window_radius_cells: 2) with cell size declared in binding; added elongated 2x12-cell cluster control to report outcome without threshold tuning",
+      "motivation": "Clarifies dimensional units and benchmark performance on asymmetric/ribbon settlements"
+    },
+    {
+      "change": "Group emergence parameters: no change from v1",
+      "motivation": "Maintains strict parity; group emergence remains unchanged"
+    },
+    {
+      "change": "Cultural spread emergence parameters: no change from v1",
+      "motivation": "Maintains strict parity; cultural spread remains unchanged"
+    }
+  ],
+  "control_worlds": {
+    "negative_controls": [
+      "saturated_uniform_random",
+      "regular_lattice_overdispersed",
+      "tiny_enrichment_large_population",
+      "dissolving_cluster",
+      "immigrants_only",
+      "undersized_cluster",
+      "oasis_resource_weighted_congregation",
+      "elongated_2x12_ribbon"
+    ],
+    "positive_controls": [
+      "dense_cluster_baseline",
+      "dense_cluster_100_agents",
+      "dense_cluster_300_agents",
+      "just_above_enrichment_floor",
+      "outlier_wanderers_present"
+    ]
+  },
+  "cultural_spread": {
+    "max_common_ancestor_generations": 4,
+    "min_adopter_absolute": 8,
+    "min_adopter_fraction": "0.100000",
+    "min_distinct_lineages": 3,
+    "min_fidelity_fraction": "0.900000",
+    "min_non_kin_transmission_fraction": "0.500000",
+    "min_post_founder_adopters": 5,
+    "min_spatial_span_cells": 2,
+    "min_speed_ratio_vs_lineage": "2.000000"
+  },
+  "description": "Pre-registered quantitative operational definitions of emergence for GENESIS Alpha (v2: scan statistic settlement fix with member persistence retention).",
+  "group": {
+    "community_detection_max_iterations": 20,
+    "max_kin_generation_depth": 2,
+    "min_active_years": 2,
+    "min_cohesion_ratio": "2.000000",
+    "min_internal_density": "0.200000",
+    "min_jaccard_similarity": "0.500000",
+    "min_members": 8,
+    "min_non_kin_edge_fraction": "0.300000",
+    "min_turnover_fraction": "0.500000",
+    "persistence_ticks": 3650,
+    "persistence_years": 10,
+    "sample_interval_ticks": 365
+  },
+  "null_models": {
+    "alpha_significance": "0.010000",
+    "analysis_stream_domain_tag": "genesis/analysis-stream/v1",
+    "default_analysis_seed": 1337,
+    "k_permutations": 200,
+    "significance_percentile": 99
+  },
+  "settlement": {
+    "max_centroid_drift_cells": 2,
+    "min_agents": 8,
+    "min_born_in_fraction": "0.300000",
+    "min_enrichment_ratio": "2.000000",
+    "min_footprint_jaccard_informational": "0.500000",
+    "min_jaccard_similarity": "0.500000",
+    "persistence_ticks": 1825,
+    "persistence_years": 5,
+    "radius_cells": 2,
+    "resource_weighted_null_percentile": 99,
+    "sample_interval_ticks": 365,
+    "scan_window_radius_cells": 2,
+    "significance_alpha": "0.010000",
+    "stockpile_enrichment_ratio_min": "1.500000"
+  },
+  "ticks_per_year": 365,
+  "version": "v2"
+}

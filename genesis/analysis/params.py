@@ -12,8 +12,12 @@ from typing import Any, Dict
 FROZEN_PARAMS_V1_HASH: str = (
     "9dc8c96b152a63d118070a2c15dbea0806522a1a0e391477a2b895ea55548591"
 )
+FROZEN_PARAMS_V2_HASH: str = (
+    "ee4f718cbe4f87421e778e043e0d0c015c6bb7eca0db2e0e0b922464ebeb628f"
+)
 
 _CACHED_PARAMS_V1: Dict[str, Any] = {}
+_CACHED_PARAMS_V2: Dict[str, Any] = {}
 
 
 def get_params_file_path(version: str = "v1") -> Path:
@@ -35,9 +39,11 @@ def load_emergence_params(version: str = "v1", verify_hash: bool = True) -> Dict
         FileNotFoundError: If parameter file does not exist.
         ValueError: If file content does not match the frozen hash.
     """
-    global _CACHED_PARAMS_V1
+    global _CACHED_PARAMS_V1, _CACHED_PARAMS_V2
     if version == "v1" and _CACHED_PARAMS_V1:
         return _CACHED_PARAMS_V1
+    if version == "v2" and _CACHED_PARAMS_V2:
+        return _CACHED_PARAMS_V2
 
     params_path = get_params_file_path(version)
     if not params_path.is_file():
@@ -46,15 +52,21 @@ def load_emergence_params(version: str = "v1", verify_hash: bool = True) -> Dict
     with open(params_path, "r", encoding="utf-8") as f:
         data: Dict[str, Any] = json.load(f)
 
-    if verify_hash and version == "v1":
-        actual_hash = compute_canonical_params_hash(data)
-        if actual_hash != FROZEN_PARAMS_V1_HASH:
-            raise ValueError(
-                f"Emergence params v1 hash mismatch: expected {FROZEN_PARAMS_V1_HASH}, "
-                f"got {actual_hash}. Emergence parameters are frozen and immutable!"
-            )
+    if verify_hash:
+        expected_hash = FROZEN_PARAMS_V1_HASH if version == "v1" else (
+            FROZEN_PARAMS_V2_HASH if version == "v2" else None
+        )
+        if expected_hash is not None:
+            actual_hash = compute_canonical_params_hash(data)
+            if actual_hash != expected_hash:
+                raise ValueError(
+                    f"Emergence params {version} hash mismatch: expected {expected_hash}, "
+                    f"got {actual_hash}. Emergence parameters are frozen and immutable!"
+                )
 
     if version == "v1":
         _CACHED_PARAMS_V1 = data
+    elif version == "v2":
+        _CACHED_PARAMS_V2 = data
 
     return data

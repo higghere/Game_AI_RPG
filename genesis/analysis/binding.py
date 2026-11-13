@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
+from genesis.core.arithmetic import FixedPoint
+
 
 @dataclass(frozen=True)
 class AnalysisBinding:
@@ -25,3 +27,5 @@ class AnalysisBinding:
     adoption_event_type: str = "practice_adopted"
     stockpile_resource_property: Optional[str] = None
     resource_landscape_property: Optional[str] = None
+    world_extent: Optional[Tuple[int, int, int, int]] = None
+    cell_size: Optional[FixedPoint] = None

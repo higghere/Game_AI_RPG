@@ -29,3 +29,4 @@ class AnalysisBinding:
     resource_landscape_property: Optional[str] = None
     world_extent: Optional[Tuple[int, int, int, int]] = None
     cell_size: Optional[FixedPoint] = None
+    allow_bounding_box_extent: bool = False

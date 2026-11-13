@@ -199,14 +199,25 @@ The test suite evaluates the following synthetic control worlds:
 | `dissolving_cluster` | 20 | Disperses by Year 3 | **FAIL** | Fails member Jaccard persistence |
 | `immigrants_only` | 20 | Dense persistent cluster, 0% native births | **FAIL** | Fails generational anchoring ($0\% < 30\%$) |
 | `undersized_cluster` | 6 | Dense persistent cluster of 6 agents | **FAIL** | Fails minimum size ($6 < 8$) |
-| `oasis_resource_weighted_congregation`| 50 | Clustered on high-resource patch | **FAIL** | Fails resource-weighted oasis null ($p > 0.01$) |
+| `oasis_resource_weighted_congregation`| 50 | Clustered on high-resource patch (steep gradient) | **FAIL** | Fails resource-weighted oasis null ($p > 0.01$) |
 | `gentle_oasis_congregation` | 100 | Agents tracking 5x gentle oasis gradient | **FAIL** | Fails resource-weighted oasis null ($p > 0.01$) |
+| `saturated_uniform_plus_wanderers` | 302 | 300 on $15 \times 10$ + 2 wanderers at $(50,50), (60,60)$ | **NOT_ASSESSED** / **FAIL** | Undeclared extent yields NOT_ASSESSED; declared extent yields FAIL ($p=1.0$) |
 
 ---
 
 ## 6. Limitations & Known False Negatives
 
-1. **Elongated / Ribbon-Shaped Settlements (Known False Negative):**
+1. **Pre-Registered Statistical Power Target at $3\times$ Enrichment Was Not Met in Empirical Curve:**
+   - **Pre-Registered Target:** $\ge 95\%$ power at $3\times$ enrichment for $N=100$ and $N=300$.
+   - **Empirical Power Curve Results:** The synthetic calibration curve realized **$20\%$ power at $N=100$** and **$0\%$ power at $N=300$** under the $3\times$ background density elevation scenario.
+   - **Unambiguous Definition of "$3\times$ Enrichment":**
+     - *Background Density Multiple:* Seeding a $5 \times 5$ window with $3\times$ the spatially uniform expected count $\lambda_{\text{bg}} = N \cdot \frac{25}{\text{Area}}$ (e.g. at $N=100$ on $20 \times 20$, $\lambda_{\text{bg}} = 6.25$, so $3\lambda_{\text{bg}} \approx 19$ agents).
+     - *Ratio to Null Maximum Mean:* The test statistic's enrichment ratio is defined as $\frac{W_{\max}^{\text{obs}}}{\max(\bar{W}_{\text{unif}}, \bar{W}_{\text{res}})}$, where $\bar{W}_{\text{unif}}$ is the mean of the **maximum window count across the entire grid** over $K=200$ null permutations.
+     - Because extreme Poisson-binomial spatial fluctuations across a multi-hundred cell grid produce maximum window counts substantially higher than the spatial average (for $N=100$, $\bar{W}_{\max}^{\text{null}} \approx 10.2$, whereas average window count is only $6.25$), an observed window count of $19$ agents yields an observed enrichment ratio of $\frac{19}{10.2} \approx 1.86 < 2.0$. It thus fails the effect-size floor ($2.0\times$), despite clearing the significance rank ($p \le 0.01$).
+     - At $N=300$ on $30 \times 30$, expected background count per window is $\approx 8.33$, so $3\times$ seeding places $\approx 25$ agents; however, uniform null maximums average $\approx 15.6$, yielding an enrichment ratio of $\frac{25}{15.6} \approx 1.60 < 2.0$, also failing the effect-size floor.
+   - **Limitation Statement:** Under the frozen v2 parameter set ($\text{min\_enrichment\_ratio} = 2.000000$), reliable detection ($\ge 95\%$ power) requires roughly **$5\times$ background density** at $N=100\text{--}300$ (e.g., $N=100$ at $5\times \implies 100\%$ power; $N=300$ at $5\times \implies 100\%$ power). In accordance with instructions, **no thresholds are changed**; this behavior is formally documented as a conservative sensitivity floor of the v2 metric.
+
+2. **Elongated / Ribbon-Shaped Settlements (Known False Negative):**
    - The scan statistic evaluates $(2R+1) \times (2R+1)$ square windows ($5 \times 5$ cells for $R=2$). A dense, highly nucleated settlement configured as an elongated strip (e.g. $2 \times 12$ cells along a riverbank, road, or canyon) achieves statistical significance ($W_{\max} = 10 > P_{99} = 7$, $p \le 0.01$), but the square window captures only a fraction of its total population ($\le 10$ agents out of 24).
    - Consequently, the observed enrichment ratio is $1.974333\times$, narrowly failing the isotropic $2.000000\times$ effect-size floor.
    - This is documented as a known false negative of isotropic square scan windows; non-isotropic / directional kernels are left for future parameter sets to preserve the low computational complexity ($O(W \cdot H)$ integer prefix sums) and strict family-wise error rate control of v2.

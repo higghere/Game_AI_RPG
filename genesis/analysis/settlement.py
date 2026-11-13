@@ -518,18 +518,38 @@ def evaluate_settlement_v2(
                 cy = int(ent.get_property(binding.pos_y_prop)) if ent.has_property(binding.pos_y_prop) else 0
                 living_agents.append({"id": eid, "x": cx, "y": cy, "entity": ent})
 
-    # Spatial extent determination (binding declared extent when available, else occupied bounding box)
+    # Spatial extent determination (binding declared extent required, else opt-in bounding box or NOT_ASSESSED)
+    allow_bbox = getattr(binding, "allow_bounding_box_extent", False)
     if binding.world_extent is not None:
         grid_extent = binding.world_extent
-    elif living_agents:
-        grid_extent = (
-            min(a["x"] for a in living_agents),
-            min(a["y"] for a in living_agents),
-            max(a["x"] for a in living_agents),
-            max(a["y"] for a in living_agents),
-        )
+    elif allow_bbox:
+        if living_agents:
+            grid_extent = (
+                min(a["x"] for a in living_agents),
+                min(a["y"] for a in living_agents),
+                max(a["x"] for a in living_agents),
+                max(a["y"] for a in living_agents),
+            )
+        else:
+            grid_extent = (0, 0, 0, 0)
     else:
-        grid_extent = (0, 0, 0, 0)
+        # Without declared world_extent (and without explicit opt-in bounding-box fallback), verdict is NOT_ASSESSED
+        return {
+            "phenomenon": "settlement",
+            "params_version": "v2",
+            "params_sha256": FROZEN_PARAMS_V2_HASH,
+            "status": "NOT_ASSESSED",
+            "passed": None,
+            "candidate_id": "none",
+            "evaluated_ticks": {
+                "start_tick": start_tick,
+                "end_tick": current_tick,
+                "years": evaluated_years,
+            },
+            "reason": "world_extent not declared on binding; spatial null permutation extent undefined",
+            "sub_criteria": {},
+            "failure_reasons": ["Missing declared world_extent on AnalysisBinding"],
+        }
 
     # Candidate cells for null spatial permutations
     candidate_cells = [
